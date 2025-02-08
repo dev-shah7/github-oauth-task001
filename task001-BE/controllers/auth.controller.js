@@ -3,13 +3,28 @@ const GitHubIntegration = require("../models/GitHubIntegration");
 
 exports.handleGithubCallback = (req, res) => {
   try {
-    res.json({
-      success: true,
-      user: {
-        id: req.user.id,
+    req.login(req.user, async (loginErr) => {
+      if (loginErr) {
+        console.error("Error logging in the user:", loginErr);
+        return res.status(500).send("Error during login.");
+      }
+
+      // Store user in session
+      req.session.user = {
+        githubId: req.user.githubId,
         username: req.user.username,
-        displayName: req.user.displayName,
-      },
+        avatarUrl: req.user.avatarUrl,
+        lastSynced: req.user.lastSynced,
+      };
+
+      // Save session before redirect
+      req.session.save((err) => {
+        if (err) {
+          console.error("Session save error:", err);
+          return res.status(500).send("Error saving session");
+        }
+        res.redirect("http://localhost:4200/github-integration");
+      });
     });
   } catch (error) {
     console.error("GitHub auth error:", error);
@@ -19,7 +34,12 @@ exports.handleGithubCallback = (req, res) => {
 
 exports.getIntegrationStatus = async (req, res) => {
   try {
-    if (!req.isAuthenticated()) {
+    // Log session and auth state for debugging
+    console.log("Session:", req.session);
+    console.log("Is Authenticated:", req.isAuthenticated());
+    console.log("User:", req.user);
+
+    if (!req.isAuthenticated() || !req.user) {
       return res.json({
         isConnected: false,
         connectionDate: null,
@@ -28,7 +48,7 @@ exports.getIntegrationStatus = async (req, res) => {
     }
 
     const integration = await GitHubIntegration.findOne({
-      githubId: req.user.id,
+      githubId: req.user.githubId || req.user.id,
     });
 
     if (!integration) {

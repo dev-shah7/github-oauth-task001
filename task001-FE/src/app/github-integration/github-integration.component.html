@@ -1,0 +1,51 @@
+<mat-card>
+  <mat-card-header>
+    <mat-card-title>
+      GitHub Integration
+      <span
+        class="status-dot"
+        [class.connected]="(status$ | async)?.isConnected"
+      >
+        ●
+      </span>
+    </mat-card-title>
+  </mat-card-header>
+  <mat-card-content>
+    <div *ngIf="status$ | async as status; else loading">
+      <div *ngIf="status?.isConnected; else notConnected">
+        <div class="user-info">
+          <img
+            [src]="status.userData?.avatarUrl"
+            alt="Profile"
+            class="avatar"
+          />
+          <div class="user-details">
+            <h3>{{ status.userData?.username }}</h3>
+            <p class="email">{{ status.userData?.email }}</p>
+            <p class="connection-date">
+              Connected on: {{ status.connectionDate | date }}
+            </p>
+          </div>
+        </div>
+        <button mat-raised-button color="warn" (click)="removeIntegration()">
+          Remove Integration
+        </button>
+      </div>
+    </div>
+  </mat-card-content>
+</mat-card>
+
+<ng-template #notConnected>
+  <div class="connect-prompt">
+    <mat-icon>link_off</mat-icon>
+    <p>Not connected to GitHub</p>
+    <button mat-raised-button color="primary" (click)="connectGithub()">
+      <mat-icon>link</mat-icon>
+      Connect to GitHub
+    </button>
+  </div>
+</ng-template>
+
+<ng-template #loading>
+  <div class="loading"></div>
+</ng-template>
