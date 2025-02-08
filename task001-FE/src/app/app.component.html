@@ -1,65 +1,140 @@
-<mat-card class="github-card">
-  <ng-container *ngIf="status$ | async as status; else loading">
-    <!-- Connected State -->
-    <div *ngIf="status.isConnected" class="card-content">
-      <div class="card-header">
-        <div class="left-section">
-          <mat-icon class="github-icon">github</mat-icon>
-          <span class="service-name">GitHub</span>
-          <mat-icon class="status-icon success">check_circle</mat-icon>
-          <button
-            mat-icon-button
-            (click)="checkStatus()"
-            class="refresh-button"
-          >
-            <mat-icon>sync</mat-icon>
+<mat-accordion class="github-section">
+  <mat-expansion-panel>
+    <mat-expansion-panel-header>
+      <mat-panel-title>
+        <div class="panel-header">
+          <div class="left-section">
+            <mat-icon class="github-icon">code</mat-icon>
+            <span class="service-name">GitHub</span>
+            <ng-container *ngIf="status$ | async as status">
+              <mat-icon *ngIf="status.isConnected" class="status-icon success"
+                >verified</mat-icon
+              >
+            </ng-container>
+          </div>
+        </div>
+      </mat-panel-title>
+      <mat-panel-description *ngIf="status$ | async as status">
+        <span *ngIf="status.isConnected" class="connection-date">
+          Connected on: {{ status.connectionDate | date }}
+        </span>
+      </mat-panel-description>
+    </mat-expansion-panel-header>
+
+    <ng-container *ngIf="status$ | async as status">
+      <!-- Connected State Content -->
+      <div *ngIf="status.isConnected" class="panel-content">
+        <div class="user-details">
+          <img
+            [src]="status.userData?.avatarUrl"
+            alt="Profile"
+            class="avatar"
+          />
+          <div class="user-info">
+            <h3>{{ status.userData?.username }}</h3>
+            <p class="email">{{ status.userData?.email }}</p>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button mat-raised-button color="warn" (click)="removeIntegration()">
+            <mat-icon>remove_circle_outline</mat-icon>
+            Remove Integration
           </button>
         </div>
-        <div class="sync-time">
-          Last synced: {{ status.connectionDate | date : "medium" }}
-        </div>
       </div>
 
-      <div class="user-details">
-        <img [src]="status.userData?.avatarUrl" alt="Profile" class="avatar" />
-        <div class="user-info">
-          <h3>{{ status.userData?.username }}</h3>
-          <p class="email">{{ status.userData?.email }}</p>
+      <!-- Disconnected State Content -->
+      <div *ngIf="!status.isConnected" class="panel-content disconnected">
+        <div class="connect-prompt">
+          <button mat-raised-button color="primary" (click)="connectGithub()">
+            <mat-icon>add_circle_outline</mat-icon>
+            Connect to GitHub
+          </button>
+          <p class="connect-message">
+            Connect your GitHub account to enable repository synchronization
+          </p>
         </div>
       </div>
+    </ng-container>
+  </mat-expansion-panel>
 
-      <div class="actions">
-        <button mat-raised-button color="warn" (click)="removeIntegration()">
-          <mat-icon>link_off</mat-icon>
-          Disconnect GitHub
-        </button>
-      </div>
+  <!-- GitHub Data Panel -->
+  <mat-expansion-panel *ngIf="(status$ | async)?.isConnected">
+    <mat-expansion-panel-header>
+      <mat-panel-title>
+        <div class="panel-header">
+          <div class="left-section">
+            <mat-icon>database</mat-icon>
+            <span class="service-name">GitHub Data</span>
+          </div>
+        </div>
+      </mat-panel-title>
+    </mat-expansion-panel-header>
+
+    <div class="controls-section">
+      <mat-form-field>
+        <mat-label>Active Integrations</mat-label>
+        <mat-select
+          [(ngModel)]="selectedIntegration"
+          (selectionChange)="onIntegrationChange()"
+        >
+          <mat-option
+            *ngFor="let integration of integrations"
+            [value]="integration.id"
+          >
+            {{ integration.name }}
+          </mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field>
+        <mat-label>Select Collection</mat-label>
+        <mat-select
+          [(ngModel)]="selectedCollection"
+          (selectionChange)="onCollectionChange()"
+          [disabled]="!selectedIntegration"
+        >
+          <mat-option
+            *ngFor="let collection of collections"
+            [value]="collection.name"
+          >
+            {{ collection.displayName }}
+          </mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field class="search-field">
+        <mat-label>Search</mat-label>
+        <input
+          matInput
+          [(ngModel)]="searchText"
+          (ngModelChange)="onSearchChange()"
+          placeholder="Search in all columns"
+        />
+        <mat-icon matSuffix>search</mat-icon>
+      </mat-form-field>
     </div>
 
-    <!-- Disconnected State -->
-    <div *ngIf="!status.isConnected" class="card-content disconnected">
-      <div class="card-header">
-        <div class="left-section">
-          <mat-icon class="github-icon">github</mat-icon>
-          <span class="service-name">GitHub</span>
-        </div>
-      </div>
-
-      <div class="connect-prompt">
-        <button mat-raised-button color="primary" (click)="connectGithub()">
-          <mat-icon>link</mat-icon>
-          Connect to GitHub
-        </button>
-        <p class="connect-message">
-          Connect your GitHub account to enable repository synchronization
-        </p>
-      </div>
+    <div class="grid-container" *ngIf="selectedCollection">
+      <ag-grid-angular
+        class="ag-theme-material"
+        [rowData]="rowData"
+        [columnDefs]="columnDefs"
+        [defaultColDef]="defaultColDef"
+        [pagination]="true"
+        [paginationPageSize]="25"
+        [suppressCellFocus]="true"
+        (gridReady)="onGridReady($event)"
+        domLayout="autoHeight"
+      >
+      </ag-grid-angular>
     </div>
-  </ng-container>
-</mat-card>
+  </mat-expansion-panel>
+</mat-accordion>
 
 <ng-template #loading>
-  <mat-card class="github-card loading-state">
+  <mat-card class="loading-state">
     <mat-spinner diameter="24"></mat-spinner>
   </mat-card>
 </ng-template>

@@ -34,10 +34,6 @@ exports.handleGithubCallback = (req, res) => {
 
 exports.getIntegrationStatus = async (req, res) => {
   try {
-    console.log("Session:", req.session);
-    console.log("Is Authenticated:", req.isAuthenticated());
-    console.log("User:", req.user);
-
     if (!req.isAuthenticated() || !req.user) {
       return res.json({
         isConnected: false,
