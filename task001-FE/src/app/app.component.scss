@@ -1,0 +1,105 @@
+.github-card {
+  max-width: 600px;
+  margin: 16px;
+
+  .card-content {
+    padding: 16px;
+  }
+
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+
+    .left-section {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+
+      .github-icon {
+        font-size: 24px;
+        width: 24px;
+        height: 24px;
+      }
+
+      .service-name {
+        font-size: 18px;
+        font-weight: 500;
+      }
+
+      .status-icon {
+        &.success {
+          color: #4caf50;
+        }
+      }
+
+      .refresh-button {
+        color: #666;
+      }
+    }
+
+    .sync-time {
+      color: #666;
+      font-size: 14px;
+    }
+  }
+
+  .user-details {
+    display: flex;
+    align-items: center;
+    margin: 16px 0;
+    padding: 16px;
+    background: #f5f5f5;
+    border-radius: 8px;
+
+    .avatar {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      margin-right: 16px;
+    }
+
+    .user-info {
+      h3 {
+        margin: 0;
+        font-size: 16px;
+      }
+
+      .email {
+        margin: 4px 0 0;
+        color: #666;
+        font-size: 14px;
+      }
+    }
+  }
+
+  .actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 16px;
+  }
+
+  .disconnected {
+    .connect-prompt {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      padding: 24px 0;
+
+      .connect-message {
+        color: #666;
+        text-align: center;
+        margin: 0;
+      }
+    }
+  }
+}
+
+.loading-state {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 200px;
+}

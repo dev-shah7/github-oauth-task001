@@ -1,0 +1,65 @@
+<mat-card class="github-card">
+  <ng-container *ngIf="status$ | async as status; else loading">
+    <!-- Connected State -->
+    <div *ngIf="status.isConnected" class="card-content">
+      <div class="card-header">
+        <div class="left-section">
+          <mat-icon class="github-icon">github</mat-icon>
+          <span class="service-name">GitHub</span>
+          <mat-icon class="status-icon success">check_circle</mat-icon>
+          <button
+            mat-icon-button
+            (click)="checkStatus()"
+            class="refresh-button"
+          >
+            <mat-icon>sync</mat-icon>
+          </button>
+        </div>
+        <div class="sync-time">
+          Last synced: {{ status.connectionDate | date : "medium" }}
+        </div>
+      </div>
+
+      <div class="user-details">
+        <img [src]="status.userData?.avatarUrl" alt="Profile" class="avatar" />
+        <div class="user-info">
+          <h3>{{ status.userData?.username }}</h3>
+          <p class="email">{{ status.userData?.email }}</p>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button mat-raised-button color="warn" (click)="removeIntegration()">
+          <mat-icon>link_off</mat-icon>
+          Disconnect GitHub
+        </button>
+      </div>
+    </div>
+
+    <!-- Disconnected State -->
+    <div *ngIf="!status.isConnected" class="card-content disconnected">
+      <div class="card-header">
+        <div class="left-section">
+          <mat-icon class="github-icon">github</mat-icon>
+          <span class="service-name">GitHub</span>
+        </div>
+      </div>
+
+      <div class="connect-prompt">
+        <button mat-raised-button color="primary" (click)="connectGithub()">
+          <mat-icon>link</mat-icon>
+          Connect to GitHub
+        </button>
+        <p class="connect-message">
+          Connect your GitHub account to enable repository synchronization
+        </p>
+      </div>
+    </div>
+  </ng-container>
+</mat-card>
+
+<ng-template #loading>
+  <mat-card class="github-card loading-state">
+    <mat-spinner diameter="24"></mat-spinner>
+  </mat-card>
+</ng-template>

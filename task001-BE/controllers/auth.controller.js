@@ -23,7 +23,7 @@ exports.handleGithubCallback = (req, res) => {
           console.error("Session save error:", err);
           return res.status(500).send("Error saving session");
         }
-        res.redirect("http://localhost:4200/github-integration");
+        res.redirect("http://localhost:4200/");
       });
     });
   } catch (error) {
@@ -34,7 +34,6 @@ exports.handleGithubCallback = (req, res) => {
 
 exports.getIntegrationStatus = async (req, res) => {
   try {
-    // Log session and auth state for debugging
     console.log("Session:", req.session);
     console.log("Is Authenticated:", req.isAuthenticated());
     console.log("User:", req.user);
