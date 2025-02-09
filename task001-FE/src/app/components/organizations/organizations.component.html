@@ -82,9 +82,11 @@
     [columnDefs]="columnDefs"
     [pagination]="true"
     [paginationPageSize]="10"
-    domLayout="autoHeight"
     [defaultColDef]="defaultColDef"
     [quickFilterText]="searchText"
+    domLayout="autoHeight"
+    [enableRangeSelection]="true"
+    [animateRows]="true"
   >
   </ag-grid-angular>
 </div>
