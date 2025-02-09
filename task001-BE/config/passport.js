@@ -1,20 +1,17 @@
 const passport = require("passport");
 const GitHubStrategy = require("passport-github2").Strategy;
-const GitHubIntegration = require("../models/GitHubIntegration");
+const GitHubIntegration = require("../models/github-integration.model");
 const { encrypt, decrypt } = require("../utils/encryption");
 require("dotenv").config();
 
 passport.serializeUser((user, done) => {
-  done(null, user.id);
+  done(null, user.githubId);
 });
 
-passport.deserializeUser(async (id, done) => {
+passport.deserializeUser(async (githubId, done) => {
   try {
-    const dummyUser = {
-      id: id,
-      username: "dummyUser",
-    };
-    done(null, dummyUser);
+    const user = await GitHubIntegration.findOne({ githubId });
+    done(null, user);
   } catch (err) {
     done(err, null);
   }
@@ -25,59 +22,34 @@ passport.use(
     {
       clientID: process.env.GITHUB_CLIENT_ID,
       clientSecret: process.env.GITHUB_CLIENT_SECRET,
-      callbackURL:
-        process.env.GITHUB_CALLBACK_URL ||
-        "http://localhost:3000/api/auth/github/callback",
-      scope: ["user", "repo", "read:org"],
+      callbackURL: "http://localhost:3000/api/auth/github/callback",
+      scope: ["read:org", "user", "repo", "write:org"],
     },
-    async function (accessToken, refreshToken, profile, done) {
+    async (accessToken, refreshToken, profile, done) => {
       try {
-        let integration = await GitHubIntegration.findOne({
-          githubId: profile.id,
-        });
+        let user = await GitHubIntegration.findOne({ githubId: profile.id });
 
-        const integrationData = {
-          githubId: profile.id,
-          username: profile.username,
-          avatarUrl: profile.photos?.[0]?.value,
-          email: profile.emails?.[0]?.value,
-          accessToken: encrypt(accessToken),
-          refreshToken: refreshToken ? encrypt(refreshToken) : null,
-          profile: {
-            name: profile._json.name,
-            bio: profile._json.bio,
-            location: profile._json.location,
-            company: profile._json.company,
-            blog: profile._json.blog,
-            publicRepos: profile._json.public_repos,
-            followers: profile._json.followers,
-            following: profile._json.following,
-          },
-          lastUpdated: new Date(),
-        };
+        if (!user) {
+          user = new GitHubIntegration({
+            githubId: profile.id,
+            username: profile.username,
+            email: profile.emails?.[0]?.value,
+            avatarUrl: profile.photos?.[0]?.value,
+            accessToken,
+            profile: profile._json,
+            connectionDate: new Date(),
+          });
 
-        if (integration) {
-          integration = await GitHubIntegration.findOneAndUpdate(
-            { githubId: profile.id },
-            integrationData,
-            { new: true }
-          );
+          await user.save();
         } else {
-          integration = await GitHubIntegration.create(integrationData);
+          user.accessToken = accessToken;
+          user.lastLogin = new Date();
+          await user.save();
         }
 
-        const user = {
-          id: profile.id,
-          username: profile.username,
-          displayName: profile.displayName || profile.username,
-          accessToken: accessToken,
-          refreshToken: refreshToken,
-        };
-
         return done(null, user);
-      } catch (err) {
-        console.error("Error in GitHub strategy:", err);
-        return done(err, null);
+      } catch (error) {
+        return done(error, null);
       }
     }
   )

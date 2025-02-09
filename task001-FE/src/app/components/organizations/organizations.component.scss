@@ -1,0 +1,23 @@
+.organizations {
+  padding: 16px;
+}
+
+.controls {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.table-controls {
+  margin-bottom: 16px;
+
+  mat-form-field {
+    width: 100%;
+    max-width: 400px;
+  }
+}
+
+ag-grid-angular {
+  width: 100%;
+  height: 500px;
+}

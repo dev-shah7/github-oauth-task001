@@ -7,5 +7,13 @@ router.get(
   "/github/organizations",
   integrationController.getGithubOrganizations
 );
+router.get(
+  "/github/organizations/:orgId/:dataType",
+  integrationController.getOrganizationData
+);
+router.post(
+  "/github/organizations/:orgId/repo/:dataType",
+  integrationController.getRepositoryData
+);
 
 module.exports = router;

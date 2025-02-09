@@ -1,0 +1,90 @@
+<div class="organizations">
+  <div class="controls">
+    <mat-form-field *ngIf="organizations.length">
+      <mat-label>Select Organization</mat-label>
+      <mat-select [(ngModel)]="selectedOrg" (selectionChange)="onOrgChange()">
+        <mat-option *ngFor="let org of organizations" [value]="org.orgId">
+          {{ org.name }}
+        </mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field *ngIf="selectedOrg">
+      <mat-label>Select Data Type</mat-label>
+      <mat-select
+        [(ngModel)]="selectedDataType"
+        (selectionChange)="onDataTypeChange()"
+      >
+        <mat-option
+          *ngFor="let option of dataTypeOptions"
+          [value]="option.value"
+        >
+          {{ option.label }}
+        </mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field
+      *ngIf="selectedDataType === 'repo-data' && repositories?.length"
+    >
+      <mat-label>Select Repository</mat-label>
+      <mat-select [(ngModel)]="selectedRepo" (selectionChange)="onRepoChange()">
+        <mat-option *ngFor="let repo of repositories" [value]="repo">
+          {{ repo.name }}
+        </mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field *ngIf="selectedRepo">
+      <mat-label>Select Data Type</mat-label>
+      <mat-select
+        [(ngModel)]="selectedSubType"
+        (selectionChange)="loadRepoData()"
+      >
+        <mat-option
+          *ngFor="let subType of getRepoDataTypes()"
+          [value]="subType.value"
+        >
+          {{ subType.label }}
+        </mat-option>
+      </mat-select>
+    </mat-form-field>
+  </div>
+
+  <div class="table-controls" *ngIf="!loading && !error && rowData.length">
+    <mat-form-field appearance="outline">
+      <mat-label>Search</mat-label>
+      <input
+        matInput
+        [(ngModel)]="searchText"
+        (ngModelChange)="onSearchChange($event)"
+        placeholder="Search in all columns..."
+      />
+      <button
+        *ngIf="searchText"
+        matSuffix
+        mat-icon-button
+        aria-label="Clear"
+        (click)="clearSearch()"
+      >
+        <mat-icon>close</mat-icon>
+      </button>
+    </mat-form-field>
+  </div>
+
+  <div *ngIf="loading">Loading...</div>
+  <div *ngIf="error">{{ error }}</div>
+
+  <ag-grid-angular
+    *ngIf="!loading && !error && rowData.length"
+    class="ag-theme-material"
+    [rowData]="rowData"
+    [columnDefs]="columnDefs"
+    [pagination]="true"
+    [paginationPageSize]="10"
+    domLayout="autoHeight"
+    [defaultColDef]="defaultColDef"
+    [quickFilterText]="searchText"
+  >
+  </ag-grid-angular>
+</div>

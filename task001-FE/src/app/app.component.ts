@@ -1,4 +1,11 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
+import {
+  trigger,
+  state,
+  style,
+  transition,
+  animate,
+} from '@angular/animations';
 // import { RouterOutlet } from '@angular/router';
 // import { AgGridAngular } from 'ag-grid-angular';
 import {
@@ -22,6 +29,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { FormsModule } from '@angular/forms';
 import { AgGridModule } from 'ag-grid-angular';
+import { OrganizationsComponent } from './components/organizations/organizations.component';
 
 // Register AG Grid modules
 // ModuleRegistry.registerModules([ClientSideRowModelModule]);
@@ -67,9 +75,30 @@ interface Integration {
     MatInputModule,
     FormsModule,
     AgGridModule,
+    OrganizationsComponent,
   ],
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss'],
+  animations: [
+    trigger('transitionMessages', [
+      state(
+        'void',
+        style({
+          opacity: 0,
+          transform: 'translateY(-10px)',
+        })
+      ),
+      state(
+        '*',
+        style({
+          opacity: 1,
+          transform: 'translateY(0)',
+        })
+      ),
+      transition(':enter', [animate('300ms ease-in')]),
+      transition(':leave', [animate('300ms ease-out')]),
+    ]),
+  ],
 })
 export class AppComponent implements OnInit, OnDestroy {
   private apiUrl = 'http://localhost:3000/api';
@@ -153,28 +182,29 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   private loadCollectionData() {
-    this.http
-      .get<any[]>(
-        `${this.apiUrl}/${this.selectedIntegration}/${this.selectedCollection}`
-      )
-      .subscribe({
-        next: (data) => {
-          if (data.length > 0) {
-            this.columnDefs = Object.keys(data[0]).map((key) => ({
-              field: key,
-              headerName: this.formatHeaderName(key),
-              filter: true,
-              sortable: true,
-            }));
-            this.rowData = data;
-          } else {
-            this.columnDefs = [];
-            this.rowData = [];
-          }
-        },
-        error: (error) =>
-          console.error(`Error loading ${this.selectedCollection}:`, error),
-      });
+    const endpoint =
+      this.selectedCollection === 'organizations'
+        ? `${this.apiUrl}/integrations/github/organizations`
+        : `${this.apiUrl}/${this.selectedIntegration}/${this.selectedCollection}`;
+
+    this.http.get<any[]>(endpoint).subscribe({
+      next: (data) => {
+        if (data.length > 0) {
+          this.columnDefs = Object.keys(data[0]).map((key) => ({
+            field: key,
+            headerName: this.formatHeaderName(key),
+            filter: true,
+            sortable: true,
+          }));
+          this.rowData = data;
+        } else {
+          this.columnDefs = [];
+          this.rowData = [];
+        }
+      },
+      error: (error) =>
+        console.error(`Error loading ${this.selectedCollection}:`, error),
+    });
   }
 
   private formatHeaderName(key: string): string {

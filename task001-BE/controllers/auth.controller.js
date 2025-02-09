@@ -9,15 +9,9 @@ exports.handleGithubCallback = (req, res) => {
         return res.status(500).send("Error during login.");
       }
 
-      // Store user in session
-      req.session.user = {
-        githubId: req.user.githubId,
-        username: req.user.username,
-        avatarUrl: req.user.avatarUrl,
-        lastSynced: req.user.lastSynced,
-      };
+      // Store complete user object in session
+      req.session.user = req.user; // Store the complete user object instead of selected fields
 
-      // Save session before redirect
       req.session.save((err) => {
         if (err) {
           console.error("Session save error:", err);
@@ -74,14 +68,29 @@ exports.getIntegrationStatus = async (req, res) => {
 exports.removeIntegration = async (req, res) => {
   try {
     if (req.isAuthenticated()) {
-      await GitHubIntegration.deleteOne({ githubId: req.user.id });
+      // Get the correct githubId from the authenticated user
+      const githubId = req.user.githubId;
+
+      // Delete the integration using the correct githubId
+      const result = await GitHubIntegration.findOneAndDelete({ githubId });
+
+      if (!result) {
+        return res.status(404).json({ error: "Integration not found" });
+      }
+
       req.logout((err) => {
         if (err) {
           return res
             .status(500)
             .json({ error: "Failed to remove integration" });
         }
-        res.json({ success: true });
+        // Clear the session after successful deletion
+        req.session.destroy((sessionErr) => {
+          if (sessionErr) {
+            console.error("Session destroy error:", sessionErr);
+          }
+          res.json({ success: true });
+        });
       });
     } else {
       res.status(401).json({ error: "Not authenticated" });
