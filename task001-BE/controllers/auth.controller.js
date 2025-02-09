@@ -9,8 +9,7 @@ exports.handleGithubCallback = (req, res) => {
         return res.status(500).send("Error during login.");
       }
 
-      // Store complete user object in session
-      req.session.user = req.user; // Store the complete user object instead of selected fields
+      req.session.user = req.user;
 
       req.session.save((err) => {
         if (err) {
@@ -68,10 +67,8 @@ exports.getIntegrationStatus = async (req, res) => {
 exports.removeIntegration = async (req, res) => {
   try {
     if (req.isAuthenticated()) {
-      // Get the correct githubId from the authenticated user
       const githubId = req.user.githubId;
 
-      // Delete the integration using the correct githubId
       const result = await GitHubIntegration.findOneAndDelete({ githubId });
 
       if (!result) {
@@ -84,7 +81,6 @@ exports.removeIntegration = async (req, res) => {
             .status(500)
             .json({ error: "Failed to remove integration" });
         }
-        // Clear the session after successful deletion
         req.session.destroy((sessionErr) => {
           if (sessionErr) {
             console.error("Session destroy error:", sessionErr);

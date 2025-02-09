@@ -1,6 +1,9 @@
 const GitHubIntegration = require("../models/github-integration.model");
 const GithubOrganization = require("../models/github-organization.model");
 const axios = require("axios");
+const GithubRepository = require("../models/github-repository.model");
+const GithubCommit = require("../models/github-commit.model");
+const GithubPullRequest = require("../models/github-pull-request.model");
 
 exports.getIntegrations = async (req, res) => {
   try {
@@ -112,51 +115,61 @@ exports.getOrganizationData = async (req, res) => {
     const decryptedToken = integration.getDecryptedAccessToken();
     let endpoint;
 
-    // Handle repository-specific endpoints
-    if (dataType.startsWith("repos/")) {
-      const [, owner, repo, subType] = dataType.split("/");
+    switch (dataType) {
+      case "members":
+        endpoint = `https://api.github.com/orgs/${organization.login}/members`;
+        const membersResponse = await axios.get(endpoint, {
+          headers: {
+            Accept: "application/vnd.github+json",
+            Authorization: `Bearer ${decryptedToken}`,
+            "X-GitHub-Api-Version": "2022-11-28",
+          },
+        });
+        return res.json(membersResponse.data);
 
-      console.log("subType", subType);
-      console.log("owner", owner);
-      console.log("repo", repo);
-      switch (subType) {
-        case "commits":
-          endpoint = `https://api.github.com/repos/${owner}/${repo}/commits`;
-          break;
-        case "pulls":
-          endpoint = `https://api.github.com/repos/${owner}/${repo}/pulls`;
-          break;
-        case "issues":
-          endpoint = `https://api.github.com/repos/${owner}/${repo}/issues`;
-          break;
-        default:
-          return res
-            .status(400)
-            .json({ error: "Invalid repository data type" });
-      }
-    } else {
-      // Handle organization-level data types
-      switch (dataType) {
-        case "members":
-          endpoint = `https://api.github.com/orgs/${organization.login}/members`;
-          break;
-        case "repos":
-          endpoint = `https://api.github.com/orgs/${organization.login}/repos`;
-          break;
-        default:
-          return res.status(400).json({ error: "Invalid data type requested" });
-      }
+      case "repos":
+        endpoint = `https://api.github.com/orgs/${organization.login}/repos`;
+        const response = await axios.get(endpoint, {
+          headers: {
+            Accept: "application/vnd.github+json",
+            Authorization: `Bearer ${decryptedToken}`,
+            "X-GitHub-Api-Version": "2022-11-28",
+          },
+        });
+
+        // Store repositories
+        const repositories = await Promise.all(
+          response.data.map(async (repo) => {
+            const repoData = {
+              orgId: organization.orgId,
+              repoId: repo.id,
+              name: repo.name,
+              fullName: repo.full_name,
+              owner: {
+                login: repo.owner.login,
+                id: repo.owner.id,
+                avatarUrl: repo.owner.avatar_url,
+              },
+              private: repo.private,
+              description: repo.description,
+              url: repo.url,
+              htmlUrl: repo.html_url,
+              createdAt: repo.created_at,
+              updatedAt: repo.updated_at,
+              githubIntegrationId: integration._id,
+            };
+            return await GithubRepository.findOneAndUpdate(
+              { repoId: repoData.repoId },
+              repoData,
+              { upsert: true, new: true }
+            );
+          })
+        );
+        return res.json(repositories);
+
+      default:
+        return res.status(400).json({ error: "Invalid data type requested" });
     }
-
-    const response = await axios.get(endpoint, {
-      headers: {
-        Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${decryptedToken}`,
-        "X-GitHub-Api-Version": "2022-11-28",
-      },
-    });
-
-    res.json(response.data);
   } catch (error) {
     console.error("Error fetching organization data:", error);
     res.status(500).json({
@@ -214,7 +227,76 @@ exports.getRepositoryData = async (req, res) => {
       },
     });
 
-    res.json(response.data);
+    switch (dataType) {
+      case "commits":
+        const commits = await Promise.all(
+          response.data.map(async (commit) => {
+            const commitData = {
+              orgId: organization.orgId,
+              repoId: repo.repoId,
+              sha: commit.sha,
+              commit: {
+                author: commit.commit.author,
+                message: commit.commit.message,
+              },
+              author: commit.author && {
+                login: commit.author.login,
+                id: commit.author.id,
+                avatarUrl: commit.author.avatar_url,
+              },
+              url: commit.url,
+              htmlUrl: commit.html_url,
+              githubIntegrationId: integration._id,
+            };
+
+            return await GithubCommit.findOneAndUpdate(
+              { sha: commitData.sha },
+              commitData,
+              { upsert: true, new: true }
+            );
+          })
+        );
+        return res.json(commits);
+
+      case "pulls":
+        const pulls = await Promise.all(
+          response.data.map(async (pr) => {
+            const prData = {
+              orgId: organization.orgId,
+              repoId: repo.repoId,
+              number: pr.number,
+              title: pr.title,
+              state: pr.state,
+              user: {
+                login: pr.user.login,
+                id: pr.user.id,
+                avatarUrl: pr.user.avatar_url,
+              },
+              body: pr.body,
+              createdAt: pr.created_at,
+              updatedAt: pr.updated_at,
+              closedAt: pr.closed_at,
+              mergedAt: pr.merged_at,
+              url: pr.url,
+              htmlUrl: pr.html_url,
+              githubIntegrationId: integration._id,
+            };
+
+            return await GithubPullRequest.findOneAndUpdate(
+              {
+                repoId: prData.repoId,
+                number: prData.number,
+              },
+              prData,
+              { upsert: true, new: true }
+            );
+          })
+        );
+        return res.json(pulls);
+
+      default:
+        return res.status(400).json({ error: "Invalid repository data type" });
+    }
   } catch (error) {
     console.error("Error fetching repository data:", error);
     res.status(500).json({
