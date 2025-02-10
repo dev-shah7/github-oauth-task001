@@ -245,6 +245,5 @@ export class AppComponent implements OnInit, OnDestroy {
         { name: 'users', displayName: 'Users' },
       ];
     }
-    // Add more integration types here
   }
 }
