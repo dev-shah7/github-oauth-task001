@@ -1,17 +1,23 @@
 const GitHubIntegration = require("../models/github-integration.model");
 const GithubOrganization = require("../models/github-organization.model");
-const axios = require("axios");
 const GithubRepository = require("../models/github-repository.model");
-const GithubCommit = require("../models/github-commit.model");
-const GithubPullRequest = require("../models/github-pull-request.model");
+const { handleApiError } = require("../utils/errorHandler");
+const { validateUser } = require("../middleware/auth.middleware");
+const {
+  fetchGithubData,
+  getAuthHeaders,
+} = require("../services/github.service");
+const {
+  handleCommits,
+  handlePulls,
+  handleIssues,
+} = require("../utils/dataHandlers");
+const axios = require("axios");
 
 exports.getIntegrations = async (req, res) => {
   try {
     const githubIntegrations = await GitHubIntegration.find();
-
-    if (githubIntegrations.length === 0) {
-      return res.json([]);
-    }
+    if (githubIntegrations.length === 0) return res.json([]);
 
     const integrations = githubIntegrations.map((integration) => ({
       id: "github",
@@ -22,38 +28,18 @@ exports.getIntegrations = async (req, res) => {
 
     res.json(integrations);
   } catch (error) {
-    console.error("Error in getIntegrations:", error);
-    res.status(500).json({ error: error.message });
+    handleApiError(error, res, "Error in getIntegrations");
   }
 };
 
 exports.getGithubOrganizations = async (req, res) => {
   try {
-    const user = req.user || req.session?.user;
+    const integration = await validateUser(req, res);
+    if (!integration) return;
 
-    if (!user) {
-      return res.status(401).json({ error: "Not authenticated" });
-    }
+    const token = integration.getDecryptedAccessToken();
+    const response = await fetchGithubData("/user/orgs", token);
 
-    const integration = await GitHubIntegration.findOne({
-      githubId: user.githubId,
-    });
-
-    if (!integration) {
-      return res.status(404).json({ error: "GitHub integration not found" });
-    }
-
-    const decryptedToken = integration.getDecryptedAccessToken();
-
-    const response = await axios.get(`https://api.github.com/user/orgs`, {
-      headers: {
-        Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${decryptedToken}`,
-        "X-GitHub-Api-Version": "2022-11-28",
-      },
-    });
-
-    // Store or update organizations
     const organizations = await Promise.all(
       response.data.map(async (org) => {
         const orgData = {
@@ -72,7 +58,7 @@ exports.getGithubOrganizations = async (req, res) => {
           githubIntegrationId: integration._id,
         };
 
-        return await GithubOrganization.findOneAndUpdate(
+        return GithubOrganization.findOneAndUpdate(
           { orgId: orgData.orgId },
           orgData,
           { upsert: true, new: true }
@@ -82,11 +68,7 @@ exports.getGithubOrganizations = async (req, res) => {
 
     res.json(organizations);
   } catch (error) {
-    console.error("Error fetching GitHub organizations:", error);
-    res.status(500).json({
-      error: "Failed to fetch organizations",
-      details: error.response?.data || error.message,
-    });
+    handleApiError(error, res, "Failed to fetch organizations");
   }
 };
 
@@ -229,91 +211,165 @@ exports.getRepositoryData = async (req, res) => {
 
     switch (dataType) {
       case "commits":
-        const commits = await Promise.all(
-          response.data.map(async (commit) => {
-            const commitData = {
-              orgId: organization.orgId,
-              repoId: repo.repoId,
-              sha: commit.sha,
-              commit: {
-                author: commit.commit.author,
-                message: commit.commit.message,
-              },
-              author: commit.author && {
-                login: commit.author.login,
-                id: commit.author.id,
-                avatarUrl: commit.author.avatar_url,
-              },
-              url: commit.url,
-              htmlUrl: commit.html_url,
-              githubIntegrationId: integration._id,
-            };
-
-            return await GithubCommit.findOneAndUpdate(
-              { sha: commitData.sha },
-              commitData,
-              { upsert: true, new: true }
-            );
-          })
+        const commits = await handleCommits(
+          response.data,
+          integration,
+          repo.repoId,
+          orgId
         );
         return res.json(commits);
 
       case "pulls":
-        const pulls = await Promise.all(
-          response.data.map(async (pr) => {
-            const prData = {
-              orgId: organization.orgId,
-              repoId: repo.repoId,
-              number: pr.number,
-              title: pr.title,
-              state: pr.state,
-              user: {
-                login: pr.user.login,
-                id: pr.user.id,
-                avatarUrl: pr.user.avatar_url,
-              },
-              body: pr.body,
-              createdAt: pr.created_at,
-              updatedAt: pr.updated_at,
-              closedAt: pr.closed_at,
-              mergedAt: pr.merged_at,
-              url: pr.url,
-              htmlUrl: pr.html_url,
-              githubIntegrationId: integration._id,
-            };
-
-            return await GithubPullRequest.findOneAndUpdate(
-              {
-                repoId: prData.repoId,
-                number: prData.number,
-              },
-              prData,
-              { upsert: true, new: true }
-            );
-          })
+        const pulls = await handlePulls(
+          response.data,
+          integration,
+          repo.repoId,
+          orgId
         );
         return res.json(pulls);
 
       case "issues":
-        const issues = response.data.map((issue) => ({
-          number: issue.number,
-          title: issue.title,
-          state: issue.state,
-          user: {
-            login: issue.user.login,
-            id: issue.user.id,
-            avatarUrl: issue.user.avatar_url,
+        const issues = handleIssues(response.data);
+        return res.json(issues);
+
+      default:
+        return res.status(400).json({ error: "Invalid repository data type" });
+    }
+  } catch (error) {
+    console.error("Error fetching repository data:", error);
+    res.status(500).json({
+      error: "Failed to fetch repository data",
+      details: error.response?.data || error.message,
+    });
+  }
+};
+
+exports.getUserRepos = async (req, res) => {
+  try {
+    const user = req.user || req.session?.user;
+
+    if (!user) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    const integration = await GitHubIntegration.findOne({
+      githubId: user.githubId,
+    });
+
+    if (!integration) {
+      return res.status(404).json({ error: "GitHub integration not found" });
+    }
+
+    const decryptedToken = integration.getDecryptedAccessToken();
+
+    const response = await axios.get("https://api.github.com/user/repos", {
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${decryptedToken}`,
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+    });
+
+    // Store repositories
+    const repositories = await Promise.all(
+      response.data.map(async (repo) => {
+        const repoData = {
+          repoId: repo.id,
+          name: repo.name,
+          fullName: repo.full_name,
+          owner: {
+            login: repo.owner.login,
+            id: repo.owner.id,
+            avatarUrl: repo.owner.avatar_url,
           },
-          body: issue.body,
-          createdAt: issue.created_at,
-          updatedAt: issue.updated_at,
-          closedAt: issue.closed_at,
-          labels: issue.labels,
-          assignees: issue.assignees,
-          comments: issue.comments,
-          url: issue.url,
-          htmlUrl: issue.html_url,
-        }));
+          private: repo.private,
+          description: repo.description,
+          url: repo.url,
+          htmlUrl: repo.html_url,
+          createdAt: repo.created_at,
+          updatedAt: repo.updated_at,
+          githubIntegrationId: integration._id,
+        };
+        return await GithubRepository.findOneAndUpdate(
+          { repoId: repoData.repoId },
+          repoData,
+          { upsert: true, new: true }
+        );
+      })
+    );
+
+    res.json(repositories);
+  } catch (error) {
+    console.error("Error fetching user repos:", error);
+    res.status(500).json({
+      error: "Failed to fetch repositories",
+      details: error.response?.data || error.message,
+    });
+  }
+};
+
+exports.getUserRepoData = async (req, res) => {
+  try {
+    const { owner, repo } = req.body;
+    const { type } = req.params;
+    const user = req.user || req.session?.user;
+
+    if (!user) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    const integration = await GitHubIntegration.findOne({
+      githubId: user.githubId,
+    });
+
+    if (!integration) {
+      return res.status(404).json({ error: "GitHub integration not found" });
+    }
+
+    const decryptedToken = integration.getDecryptedAccessToken();
+    let endpoint;
+
+    switch (type) {
+      case "commits":
+        endpoint = `https://api.github.com/repos/${owner}/${repo}/commits`;
+        break;
+      case "pulls":
+        endpoint = `https://api.github.com/repos/${owner}/${repo}/pulls`;
+        break;
+      case "issues":
+        endpoint = `https://api.github.com/repos/${owner}/${repo}/issues`;
+        break;
+      default:
+        return res.status(400).json({ error: "Invalid repository data type" });
+    }
+
+    const response = await axios.get(endpoint, {
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${decryptedToken}`,
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+    });
+
+    switch (type) {
+      case "commits":
+        const commits = await handleCommits(
+          response.data,
+          integration,
+          repo.repoId
+        );
+        return res.json(commits);
+
+      case "pulls":
+        const pulls = await handlePulls(
+          response.data,
+          integration,
+          repo.repoId
+        );
+        return res.json(pulls);
+
+      case "issues":
+        const issues = handleIssues(response.data);
         return res.json(issues);
 
       default:

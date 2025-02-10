@@ -75,6 +75,7 @@ export class OrganizationsComponent implements OnInit {
   selectedRepo: Repository | null = null;
   repositories: Repository[] = [];
   selectedSubType: string = '';
+  repoSource: 'user' | 'organization' = 'organization';
 
   dataTypeOptions: DataTypeOption[] = [
     { value: 'members', label: 'Members' },
@@ -139,6 +140,10 @@ export class OrganizationsComponent implements OnInit {
     this.repositories = [];
     this.rowData = [];
     this.columnDefs = [];
+
+    if (this.repoSource === 'user') {
+      this.selectedOrg = '';
+    }
   }
 
   onDataTypeChange() {
@@ -164,43 +169,46 @@ export class OrganizationsComponent implements OnInit {
   }
 
   loadOrgData(): void {
-    if (!this.selectedOrg || !this.selectedDataType) return;
+    if (
+      (!this.selectedOrg && this.repoSource === 'organization') ||
+      !this.selectedDataType
+    )
+      return;
 
     this.loading = true;
     this.error = null;
 
-    const [mainType, subType] = this.selectedDataType.split('/');
-    const endpoint = this.getEndpoint(mainType, subType);
+    const endpoint = this.getEndpoint(this.selectedDataType);
 
     this.http.get<any[]>(endpoint, { withCredentials: true }).subscribe({
       next: (data) => {
         this.rowData = data;
         if (data.length > 0) {
-          this.columnDefs = Object.keys(data[0]).map((key) =>
-            this.getColumnDef(key, data[0][key])
+          this.columnDefs = Object.entries(data[0]).map(([key, value]) =>
+            this.getColumnDef(key, value)
           );
         }
         this.loading = false;
       },
       error: (err) => {
-        console.error('Error fetching org data:', err);
-        this.error = 'Failed to load organization data';
+        console.error('Error fetching data:', err);
+        this.error = 'Failed to load data';
         this.loading = false;
       },
     });
   }
 
-  private getEndpoint(mainType: string, subType?: string): string {
-    const baseUrl = `${environment.apiUrl}/integrations/github/organizations/${this.selectedOrg}`;
+  private getEndpoint(dataType: string): string {
+    const baseUrl =
+      this.repoSource === 'user'
+        ? `${environment.apiUrl}/integrations/github/user`
+        : `${environment.apiUrl}/integrations/github/organizations/${this.selectedOrg}`;
 
-    if (mainType === 'repos' && subType) {
-      if (subType === 'list') {
-        return `${baseUrl}/repos`;
-      }
-      return `${baseUrl}/repos/${subType}`;
+    if (dataType === 'repos') {
+      return `${baseUrl}/repos`;
     }
 
-    return `${baseUrl}/${mainType}`;
+    return `${baseUrl}/${dataType}`;
   }
 
   private formatHeaderName(key: string): string {
@@ -214,22 +222,22 @@ export class OrganizationsComponent implements OnInit {
     this.loading = true;
     this.error = null;
 
-    this.http
-      .get<Repository[]>(
-        `${environment.apiUrl}/integrations/github/organizations/${this.selectedOrg}/repos`,
-        { withCredentials: true }
-      )
-      .subscribe({
-        next: (data) => {
-          this.repositories = data;
-          this.loading = false;
-        },
-        error: (err) => {
-          console.error('Error fetching repositories:', err);
-          this.error = 'Failed to load repositories';
-          this.loading = false;
-        },
-      });
+    const endpoint =
+      this.repoSource === 'user'
+        ? `${environment.apiUrl}/integrations/github/user/repos`
+        : `${environment.apiUrl}/integrations/github/organizations/${this.selectedOrg}/repos`;
+
+    this.http.get<Repository[]>(endpoint, { withCredentials: true }).subscribe({
+      next: (data) => {
+        this.repositories = data;
+        this.loading = false;
+      },
+      error: (err) => {
+        console.error('Error fetching repositories:', err);
+        this.error = 'Failed to load repositories';
+        this.loading = false;
+      },
+    });
   }
 
   loadRepoData() {
@@ -238,7 +246,10 @@ export class OrganizationsComponent implements OnInit {
     this.loading = true;
     this.error = null;
 
-    const endpoint = `${environment.apiUrl}/integrations/github/organizations/${this.selectedOrg}/repo/${this.selectedSubType}`;
+    const endpoint =
+      this.repoSource === 'user'
+        ? `${environment.apiUrl}/integrations/github/user/repo/${this.selectedSubType}`
+        : `${environment.apiUrl}/integrations/github/organizations/${this.selectedOrg}/repo/${this.selectedSubType}`;
 
     const payload = {
       owner: this.selectedRepo.owner.login,
@@ -386,5 +397,14 @@ export class OrganizationsComponent implements OnInit {
           },
         };
     }
+  }
+
+  getDataTypeOptions(): DataTypeOption[] {
+    if (this.repoSource === 'user') {
+      return this.dataTypeOptions.filter(
+        (option) => option.value !== 'members'
+      );
+    }
+    return this.dataTypeOptions;
   }
 }

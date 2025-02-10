@@ -15,5 +15,7 @@ router.post(
   "/github/organizations/:orgId/repo/:dataType",
   integrationController.getRepositoryData
 );
+router.get("/github/user/repos", integrationController.getUserRepos);
+router.post("/github/user/repo/:type", integrationController.getUserRepoData);
 
 module.exports = router;

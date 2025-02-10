@@ -1,6 +1,16 @@
 <div class="organizations">
   <div class="controls">
-    <mat-form-field *ngIf="organizations.length">
+    <mat-form-field>
+      <mat-label>Repository Source</mat-label>
+      <mat-select [(ngModel)]="repoSource" (selectionChange)="onOrgChange()">
+        <mat-option value="organization">Organization</mat-option>
+        <mat-option value="user">User</mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field
+      *ngIf="repoSource === 'organization' && organizations.length"
+    >
       <mat-label>Select Organization</mat-label>
       <mat-select [(ngModel)]="selectedOrg" (selectionChange)="onOrgChange()">
         <mat-option *ngFor="let org of organizations" [value]="org.orgId">
@@ -9,14 +19,14 @@
       </mat-select>
     </mat-form-field>
 
-    <mat-form-field *ngIf="selectedOrg">
+    <mat-form-field *ngIf="repoSource === 'user' || selectedOrg">
       <mat-label>Select Data Type</mat-label>
       <mat-select
         [(ngModel)]="selectedDataType"
         (selectionChange)="onDataTypeChange()"
       >
         <mat-option
-          *ngFor="let option of dataTypeOptions"
+          *ngFor="let option of getDataTypeOptions()"
           [value]="option.value"
         >
           {{ option.label }}
