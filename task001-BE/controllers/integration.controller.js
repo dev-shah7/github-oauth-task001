@@ -294,6 +294,28 @@ exports.getRepositoryData = async (req, res) => {
         );
         return res.json(pulls);
 
+      case "issues":
+        const issues = response.data.map((issue) => ({
+          number: issue.number,
+          title: issue.title,
+          state: issue.state,
+          user: {
+            login: issue.user.login,
+            id: issue.user.id,
+            avatarUrl: issue.user.avatar_url,
+          },
+          body: issue.body,
+          createdAt: issue.created_at,
+          updatedAt: issue.updated_at,
+          closedAt: issue.closed_at,
+          labels: issue.labels,
+          assignees: issue.assignees,
+          comments: issue.comments,
+          url: issue.url,
+          htmlUrl: issue.html_url,
+        }));
+        return res.json(issues);
+
       default:
         return res.status(400).json({ error: "Invalid repository data type" });
     }
