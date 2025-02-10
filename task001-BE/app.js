@@ -12,7 +12,7 @@ const PORT = process.env.PORT || 3000;
 
 app.use(
   cors({
-    origin: "http://localhost:4200",
+    origin: process.env.PUBLIC_APP_URL,
     credentials: true,
   })
 );
