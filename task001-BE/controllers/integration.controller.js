@@ -119,7 +119,6 @@ exports.getOrganizationData = async (req, res) => {
           },
         });
 
-        // Store repositories
         const repositories = await Promise.all(
           response.data.map(async (repo) => {
             const repoData = {
@@ -161,10 +160,58 @@ exports.getOrganizationData = async (req, res) => {
   }
 };
 
+async function fetchAllPages(endpoint, headers) {
+  let page = 1;
+  let allData = [];
+  let hasNextPage = true;
+  const pageSize = 100;
+
+  // Handle existing query parameters in endpoint
+  const separator = endpoint.includes("?") ? "&" : "?";
+
+  while (hasNextPage) {
+    try {
+      const response = await axios.get(
+        `${endpoint}${separator}page=${page}&per_page=${pageSize}`,
+        {
+          headers,
+        }
+      );
+
+      const data = response.data.map((item) => ({
+        ...item,
+        _page: page,
+        _pageSize: pageSize,
+      }));
+
+      if (data.length === 0) {
+        hasNextPage = false;
+      } else {
+        allData = [...allData, ...data];
+        page++;
+      }
+
+      const remainingRequests = response.headers["x-ratelimit-remaining"];
+      if (remainingRequests <= 0) {
+        console.warn("GitHub API rate limit reached");
+        break;
+      }
+    } catch (error) {
+      console.error(
+        "Error fetching page:",
+        error.response?.data || error.message
+      );
+      break;
+    }
+  }
+
+  return allData;
+}
+
 exports.getRepositoryData = async (req, res) => {
   try {
     const { orgId, dataType } = req.params;
-    const { owner, repo } = req.body;
+    const { owner, repo: repoName } = req.body; // Renamed to avoid confusion
     const user = req.user || req.session?.user;
 
     if (!user) {
@@ -185,51 +232,59 @@ exports.getRepositoryData = async (req, res) => {
     }
 
     const decryptedToken = integration.getDecryptedAccessToken();
-    let endpoint;
+    const headers = {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${decryptedToken}`,
+      "X-GitHub-Api-Version": "2022-11-28",
+    };
 
+    let endpoint;
     switch (dataType) {
       case "commits":
-        endpoint = `https://api.github.com/repos/${owner}/${repo}/commits`;
+        endpoint = `https://api.github.com/repos/${owner}/${repoName}/commits`;
         break;
       case "pulls":
-        endpoint = `https://api.github.com/repos/${owner}/${repo}/pulls`;
+        endpoint = `https://api.github.com/repos/${owner}/${repoName}/pulls?state=all`;
         break;
       case "issues":
-        endpoint = `https://api.github.com/repos/${owner}/${repo}/issues`;
+        endpoint = `https://api.github.com/repos/${owner}/${repoName}/issues?state=all&filter=all&sort=created&direction=desc`;
         break;
       default:
         return res.status(400).json({ error: "Invalid repository data type" });
     }
 
-    const response = await axios.get(endpoint, {
-      headers: {
-        Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${decryptedToken}`,
-        "X-GitHub-Api-Version": "2022-11-28",
-      },
+    const allData = await fetchAllPages(endpoint, headers);
+
+    // Get the repository ID from the database
+    const repository = await GithubRepository.findOne({
+      name: repoName,
+      "owner.login": owner,
     });
+
+    if (!repository) {
+      return res
+        .status(404)
+        .json({ error: "Repository not found in database" });
+    }
+
+    const repoId = repository.repoId;
 
     switch (dataType) {
       case "commits":
         const commits = await handleCommits(
-          response.data,
+          allData,
           integration,
-          repo.repoId,
+          repoId,
           orgId
         );
         return res.json(commits);
 
       case "pulls":
-        const pulls = await handlePulls(
-          response.data,
-          integration,
-          repo.repoId,
-          orgId
-        );
+        const pulls = await handlePulls(allData, integration, repoId, orgId);
         return res.json(pulls);
 
       case "issues":
-        const issues = handleIssues(response.data);
+        const issues = await handleIssues(allData, integration, repoId, orgId);
         return res.json(issues);
 
       default:
@@ -270,7 +325,6 @@ exports.getUserRepos = async (req, res) => {
       },
     });
 
-    // Store repositories
     const repositories = await Promise.all(
       response.data.map(async (repo) => {
         const repoData = {
@@ -310,7 +364,7 @@ exports.getUserRepos = async (req, res) => {
 
 exports.getUserRepoData = async (req, res) => {
   try {
-    const { owner, repo } = req.body;
+    const { owner, repo: repoName } = req.body;
     const { type } = req.params;
     const user = req.user || req.session?.user;
 
@@ -327,49 +381,54 @@ exports.getUserRepoData = async (req, res) => {
     }
 
     const decryptedToken = integration.getDecryptedAccessToken();
-    let endpoint;
+    const headers = {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${decryptedToken}`,
+      "X-GitHub-Api-Version": "2022-11-28",
+    };
 
+    let endpoint;
     switch (type) {
       case "commits":
-        endpoint = `https://api.github.com/repos/${owner}/${repo}/commits`;
+        endpoint = `https://api.github.com/repos/${owner}/${repoName}/commits`;
         break;
       case "pulls":
-        endpoint = `https://api.github.com/repos/${owner}/${repo}/pulls`;
+        endpoint = `https://api.github.com/repos/${owner}/${repoName}/pulls?state=all`;
         break;
       case "issues":
-        endpoint = `https://api.github.com/repos/${owner}/${repo}/issues`;
+        endpoint = `https://api.github.com/repos/${owner}/${repoName}/issues?state=all&filter=all&sort=created&direction=desc`;
         break;
       default:
         return res.status(400).json({ error: "Invalid repository data type" });
     }
 
-    const response = await axios.get(endpoint, {
-      headers: {
-        Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${decryptedToken}`,
-        "X-GitHub-Api-Version": "2022-11-28",
-      },
+    const allData = await fetchAllPages(endpoint, headers);
+
+    // Get the repository ID from the database
+    const repository = await GithubRepository.findOne({
+      name: repoName,
+      "owner.login": owner,
     });
+
+    if (!repository) {
+      return res
+        .status(404)
+        .json({ error: "Repository not found in database" });
+    }
+
+    const repoId = repository.repoId;
 
     switch (type) {
       case "commits":
-        const commits = await handleCommits(
-          response.data,
-          integration,
-          repo.repoId
-        );
+        const commits = await handleCommits(allData, integration, repoId);
         return res.json(commits);
 
       case "pulls":
-        const pulls = await handlePulls(
-          response.data,
-          integration,
-          repo.repoId
-        );
+        const pulls = await handlePulls(allData, integration, repoId);
         return res.json(pulls);
 
       case "issues":
-        const issues = handleIssues(response.data);
+        const issues = await handleIssues(allData, integration, repoId);
         return res.json(issues);
 
       default:

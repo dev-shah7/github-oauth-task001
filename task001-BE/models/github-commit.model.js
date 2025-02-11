@@ -1,52 +1,47 @@
 const mongoose = require("mongoose");
 
-const githubCommitSchema = new mongoose.Schema(
-  {
-    orgId: {
-      type: String,
-      required: true,
-      ref: "GithubOrganization",
-      index: true,
-    },
-    repoId: {
-      type: Number,
-      required: true,
-      ref: "GithubRepository",
-      index: true,
-    },
-    sha: {
-      type: String,
-      required: true,
-      unique: true,
-    },
-    commit: {
-      author: {
-        name: String,
-        email: String,
-        date: Date,
-      },
-      message: String,
-    },
+const githubCommitSchema = new mongoose.Schema({
+  repoId: {
+    type: String,
+    required: true,
+    index: true,
+  },
+  sha: {
+    type: String,
+    required: true,
+  },
+  commit: {
     author: {
-      login: String,
-      id: Number,
-      avatarUrl: String,
+      name: String,
+      email: String,
+      date: Date,
     },
-    url: String,
-    htmlUrl: String,
-    githubIntegrationId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "GitHubIntegration",
-      index: true,
+    message: String,
+  },
+  author: {
+    login: String,
+    id: Number,
+    avatarUrl: String,
+  },
+  url: String,
+  htmlUrl: String,
+  githubIntegrationId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "GitHubIntegration",
+    required: true,
+  },
+  orgId: String,
+  // Add pagination info
+  pageInfo: {
+    page: Number,
+    pageSize: Number,
+    fetchedAt: {
+      type: Date,
+      default: Date.now,
     },
   },
-  {
-    timestamps: true,
-    indexes: [
-      { repoId: 1, sha: 1 },
-      { repoId: 1, "commit.author.date": -1 },
-    ],
-  }
-);
+});
+
+githubCommitSchema.index({ repoId: 1, sha: 1 }, { unique: true });
 
 module.exports = mongoose.model("GithubCommit", githubCommitSchema);

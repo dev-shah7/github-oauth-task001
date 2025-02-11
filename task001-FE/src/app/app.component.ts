@@ -30,6 +30,8 @@ import { MatInputModule } from '@angular/material/input';
 import { FormsModule } from '@angular/forms';
 import { AgGridModule } from 'ag-grid-angular';
 import { OrganizationsComponent } from './components/organizations/organizations.component';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { GithubService } from './services/github.service';
 
 // Register AG Grid modules
 // ModuleRegistry.registerModules([ClientSideRowModelModule]);
@@ -123,7 +125,13 @@ export class AppComponent implements OnInit, OnDestroy {
     resizable: true,
   };
 
-  constructor(private http: HttpClient) {}
+  isSyncing = false;
+
+  constructor(
+    private http: HttpClient,
+    private githubService: GithubService,
+    private snackBar: MatSnackBar
+  ) {}
 
   ngOnInit() {
     this.loadIntegrations();
@@ -245,5 +253,49 @@ export class AppComponent implements OnInit, OnDestroy {
         { name: 'users', displayName: 'Users' },
       ];
     }
+  }
+
+  syncData() {
+    if (this.isSyncing) return;
+
+    this.isSyncing = true;
+    this.snackBar.open('Starting data sync...', 'Close', { duration: 3000 });
+
+    this.githubService.syncAllData().subscribe({
+      next: (response) => {
+        console.log('Sync response:', response);
+
+        // Create success message
+        const successMsg = `Sync completed!\nSynced ${
+          response.repositories.personal + response.repositories.organizational
+        } repositories\nTotals: ${
+          response.syncedData.totals.commits
+        } commits, ${response.syncedData.totals.pulls} PRs, ${
+          response.syncedData.totals.issues
+        } issues`;
+
+        // If there are errors, show them in a separate snackbar
+        if (response.errors?.length > 0) {
+          setTimeout(() => {
+            this.snackBar.open(
+              `Warnings:\n${response.errors.join('\n')}`,
+              'Close',
+              { duration: 10000 }
+            );
+          }, 1000);
+        }
+
+        // Show success message
+        this.snackBar.open(successMsg, 'Close', { duration: 5000 });
+        this.isSyncing = false;
+      },
+      error: (error) => {
+        console.error('Sync error:', error);
+        this.snackBar.open('Error syncing data. Please try again.', 'Close', {
+          duration: 5000,
+        });
+        this.isSyncing = false;
+      },
+    });
   }
 }

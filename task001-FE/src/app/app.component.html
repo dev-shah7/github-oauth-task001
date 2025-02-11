@@ -43,8 +43,18 @@
           </div>
         </div>
 
-        <!-- Action button to remove the GitHub integration -->
+        <!-- Action buttons -->
         <div class="actions">
+          <button
+            mat-raised-button
+            color="primary"
+            (click)="syncData()"
+            [disabled]="isSyncing"
+            class="sync-button"
+          >
+            <mat-icon>sync</mat-icon>
+            {{ isSyncing ? "Syncing..." : "Sync Data" }}
+          </button>
           <button mat-raised-button color="warn" (click)="removeIntegration()">
             <mat-icon>remove_circle_outline</mat-icon>
             Remove Integration

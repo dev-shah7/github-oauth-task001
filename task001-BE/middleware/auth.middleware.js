@@ -1,5 +1,18 @@
 const GitHubIntegration = require("../models/github-integration.model");
 
+const authenticateToken = async (req, res, next) => {
+  try {
+    const user = req.user || req.session?.user;
+    if (!user) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    next();
+  } catch (error) {
+    console.error("Auth error:", error);
+    res.status(401).json({ error: "Authentication failed" });
+  }
+};
+
 const validateUser = async (req, res) => {
   const user = req.user || req.session?.user;
   if (!user) {
@@ -20,5 +33,6 @@ const validateUser = async (req, res) => {
 };
 
 module.exports = {
+  authenticateToken,
   validateUser,
 };
