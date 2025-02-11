@@ -4,8 +4,11 @@
       <mat-panel-title>
         <div class="panel-header">
           <div class="left-section">
+            <!-- GitHub Icon -->
             <mat-icon class="github-icon">code</mat-icon>
             <span class="service-name">GitHub</span>
+
+            <!-- Status Icon based on connection -->
             <ng-container *ngIf="status$ | async as status">
               <mat-icon *ngIf="status.isConnected" class="status-icon success"
                 >verified</mat-icon
@@ -14,6 +17,8 @@
           </div>
         </div>
       </mat-panel-title>
+
+      <!-- Connection date display when connected -->
       <mat-panel-description *ngIf="status$ | async as status">
         <span *ngIf="status.isConnected" class="connection-date">
           Connected on: {{ status.connectionDate | date }}
@@ -25,17 +30,20 @@
       <!-- Connected State Content -->
       <div *ngIf="status.isConnected" class="panel-content">
         <div class="user-details">
+          <!-- Profile Image -->
           <img
             [src]="status.userData?.avatarUrl"
             alt="Profile"
             class="avatar"
           />
+
           <div class="user-info">
             <h3>{{ status.userData?.username }}</h3>
             <p class="email">{{ status.userData?.email }}</p>
           </div>
         </div>
 
+        <!-- Action button to remove the GitHub integration -->
         <div class="actions">
           <button mat-raised-button color="warn" (click)="removeIntegration()">
             <mat-icon>remove_circle_outline</mat-icon>
@@ -60,5 +68,5 @@
   </mat-expansion-panel>
 </mat-accordion>
 
-<!-- Add this where you want to display organizations -->
+<!-- Organizations Component -->
 <app-organizations></app-organizations>
