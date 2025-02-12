@@ -16,9 +16,20 @@ const githubCommitSchema = new mongoose.Schema({
       email: String,
       date: Date,
     },
+    committer: {
+      name: String,
+      email: String,
+      date: Date,
+    },
     message: String,
+    comment_count: Number,
   },
   author: {
+    login: String,
+    id: Number,
+    avatarUrl: String,
+  },
+  committer: {
     login: String,
     id: Number,
     avatarUrl: String,

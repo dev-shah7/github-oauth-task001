@@ -14,6 +14,9 @@ import {
   CustomFilterModule,
   QuickFilterModule,
   ExternalFilterModule,
+  PaginationChangedEvent,
+  GridOptions,
+  PaginationModule,
 } from 'ag-grid-community';
 import { MatSelectModule } from '@angular/material/select';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -31,6 +34,7 @@ ModuleRegistry.registerModules([
   CustomFilterModule,
   QuickFilterModule,
   ExternalFilterModule,
+  PaginationModule,
 ]);
 
 interface DataTypeOption {
@@ -44,6 +48,45 @@ interface Repository {
   owner: {
     login: string;
   };
+}
+
+interface PaginatedResponse<T> {
+  data: T[];
+  pagination: {
+    totalRecords: number;
+    currentPage: number;
+    pageSize: number;
+  };
+}
+
+interface GithubIssue {
+  number: number;
+  title: string;
+  state: string;
+  user: {
+    login: string;
+    avatarUrl: string;
+  };
+  body: string;
+  createdAt: Date;
+  updatedAt: Date;
+  closedAt: Date | null;
+  labels: Array<{
+    name: string;
+    color: string;
+    description: string;
+  }>;
+  assignees: Array<{
+    login: string;
+    avatarUrl: string;
+  }>;
+  milestone?: {
+    title: string;
+    state: string;
+    dueOn: Date;
+  };
+  comments: number;
+  isPullRequest: boolean;
 }
 
 @Component({
@@ -104,6 +147,42 @@ export class OrganizationsComponent implements OnInit {
   };
 
   private searchSubject = new Subject<string>();
+
+  // Add pagination properties
+  currentPage = 1;
+  pageSize = 10;
+  totalRecords = 0;
+
+  // Update pagination properties
+  pagination = true;
+  paginationPageSize = 10;
+  paginationPageSizeSelector = [10, 20];
+
+  // Add properties for pagination buttons
+  canGoNext = true;
+  canGoPrevious = false;
+
+  // Update gridOptions
+  gridOptions: GridOptions = {
+    pagination: true,
+    paginationPageSize: this.paginationPageSize,
+    paginationPageSizeSelector: this.paginationPageSizeSelector,
+    cacheBlockSize: this.paginationPageSize,
+    domLayout: 'autoHeight',
+    suppressPaginationPanel: true, // Hide the default pagination panel
+    onGridReady: (params) => {
+      this.gridApi = params.api;
+      // Wait for next tick to ensure grid is properly initialized
+      setTimeout(() => {
+        if (this.rowData.length > 0) {
+          this.updateGrid(this.rowData);
+        }
+      });
+    },
+  };
+
+  public isLoading = false;
+  private gridApi: any = null;
 
   constructor(private http: HttpClient) {}
 
@@ -240,43 +319,128 @@ export class OrganizationsComponent implements OnInit {
     });
   }
 
-  loadRepoData() {
-    if (!this.selectedRepo || !this.selectedSubType) return;
+  // Add methods for next/previous navigation
+  goToNextPage() {
+    if (this.isLoading || !this.canGoNext) return;
+    this.currentPage++;
+    this.loadRepoData();
+  }
 
-    this.loading = true;
+  goToPreviousPage() {
+    if (this.isLoading || !this.canGoPrevious) return;
+    this.currentPage--;
+    this.loadRepoData();
+  }
+
+  // Add this new method to handle page size changes
+  onPageSizeChange(newPageSize: number) {
+    // Reset to page 1 when page size changes
+    this.currentPage = 1;
+    this.pageSize = newPageSize;
+    this.loadRepoData();
+  }
+
+  // Add a new method to safely update the grid
+  private updateGrid(data: any[]) {
+    if (!this.gridApi) {
+      console.warn('Grid API not available');
+      return;
+    }
+
+    try {
+      // Flatten the first row to get all possible columns including nested ones
+      if (data.length > 0) {
+        const flattenedData = data.map((item) => this.flattenObject(item));
+        const firstRow = flattenedData[0];
+
+        // Create column definitions from flattened data
+        const columns = Object.entries(firstRow).map(([key, value]) =>
+          this.getColumnDef(key, value)
+        );
+
+        this.columnDefs = columns;
+        this.gridApi.setGridOption('columnDefs', columns);
+
+        // Update row data with flattened data
+        this.gridApi.setGridOption('rowData', flattenedData);
+      } else {
+        this.gridApi.setGridOption('rowData', []);
+      }
+
+      // Update pagination settings
+      this.gridApi.setGridOption('paginationPageSize', Number(this.pageSize));
+
+      // Apply quick filter if there's search text
+      if (this.searchText) {
+        this.gridApi.setQuickFilter(this.searchText);
+      }
+    } catch (error) {
+      console.error('Error updating grid:', error);
+      this.error = 'Error updating grid display';
+    }
+  }
+
+  // Update loadRepoData to use the new updateGrid method
+  loadRepoData() {
+    if (!this.selectedRepo || !this.selectedSubType || this.isLoading) return;
+
+    this.isLoading = true;
     this.error = null;
 
-    const endpoint =
-      this.repoSource === 'user'
-        ? `${environment.apiUrl}/integrations/github/user/repo/${this.selectedSubType}`
-        : `${environment.apiUrl}/integrations/github/organizations/${this.selectedOrg}/repo/${this.selectedSubType}`;
+    if (this.gridApi) {
+      this.gridApi.showLoadingOverlay();
+    }
 
     const payload = {
       owner: this.selectedRepo.owner.login,
       repo: this.selectedRepo.name,
+      page: this.currentPage,
+      pageSize: this.pageSize,
     };
 
+    console.log('Loading repo data with payload:', payload);
+
     this.http
-      .post<any[]>(endpoint, payload, { withCredentials: true })
+      .post<PaginatedResponse<any>>(
+        `${environment.apiUrl}/integrations/github/organizations/${this.selectedOrg}/repo/${this.selectedSubType}`,
+        payload,
+        { withCredentials: true }
+      )
       .subscribe({
-        next: (data) => {
-          this.rowData = data;
-          if (data.length > 0) {
-            this.columnDefs = Object.entries(data[0]).map(([key, value]) =>
-              this.getColumnDef(key, value)
-            );
+        next: (response) => {
+          try {
+            // Update data
+            this.rowData = response.data;
+            this.totalRecords = response?.pagination?.totalRecords || 0;
+
+            // Update pagination state
+            this.canGoPrevious = this.currentPage > 1;
+            this.canGoNext = this.rowData.length === this.pageSize;
+
+            // Update the grid with new data
+            this.updateGrid(this.rowData);
+
+            // Clear loading states
+            this.isLoading = false;
+            if (this.gridApi) {
+              this.gridApi.hideOverlay();
+            }
+          } catch (error) {
+            console.error('Error processing response:', error);
+            this.error = 'Error processing data';
+            this.isLoading = false;
+            if (this.gridApi) {
+              this.gridApi.hideOverlay();
+            }
           }
-          if (this.searchText) {
-            setTimeout(() => {
-              this.agGrid.api.setGridOption('quickFilterText', this.searchText);
-            });
-          }
-          this.loading = false;
         },
         error: (err) => {
           console.error('Error fetching repo data:', err);
           this.error = 'Failed to load repository data';
-          this.loading = false;
+          this.isLoading = false;
+          if (this.gridApi) {
+            this.gridApi.hideOverlay();
+          }
         },
       });
   }
@@ -288,23 +452,20 @@ export class OrganizationsComponent implements OnInit {
     );
   }
 
+  // Update search methods
   private setupSearch(): void {
     this.searchSubject
       .pipe(debounceTime(300), distinctUntilChanged())
       .subscribe((searchText) => {
         if (this.agGrid?.api) {
-          this.agGrid.api.paginationGoToPage(0);
-          this.agGrid.api.onFilterChanged();
-          this.agGrid.api.setGridOption('quickFilterText', searchText);
+          this.agGrid?.api?.setGridOption('quickFilterText', searchText);
         }
       });
   }
 
   onSearchChange(value: string) {
     this.searchText = value;
-    if (this.agGrid?.api) {
-      this.agGrid.api.setGridOption('quickFilterText', value);
-    }
+    this.searchSubject.next(value);
   }
 
   clearSearch() {
@@ -313,15 +474,177 @@ export class OrganizationsComponent implements OnInit {
   }
 
   private getColumnDef(key: string, value: any): ColDef {
-    const baseConfig = {
+    const baseConfig: ColDef = {
       field: key,
       headerName: this.formatHeaderName(key),
       sortable: true,
       filter: true,
       floatingFilter: true,
       resizable: true,
+      minWidth: 120,
+      autoHeight: true,
+      wrapText: true,
+      cellStyle: { 'white-space': 'normal' },
     };
 
+    // Special column configurations
+    const specialColumns: { [key: string]: ColDef } = {
+      number: {
+        ...baseConfig,
+        width: 100,
+        minWidth: 80,
+        cellRenderer: (params: any) => {
+          return `#${params.value}`;
+        },
+      },
+      state: {
+        ...baseConfig,
+        width: 120,
+        cellRenderer: (params: any) => {
+          const color = params.value === 'open' ? '#28a745' : '#cb2431';
+          return `<span style="color: ${color}; font-weight: 500;">${params.value}</span>`;
+        },
+      },
+      title: {
+        ...baseConfig,
+        minWidth: 300,
+        cellRenderer: (params: any) => {
+          const issue = params.data;
+          return `
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span>${params.value}</span>
+              ${
+                issue.labels
+                  ?.map(
+                    (label: any) => `
+                <span style="
+                  background-color: #${label.color};
+                  color: ${this.getContrastColor(label.color)};
+                  padding: 2px 6px;
+                  border-radius: 12px;
+                  font-size: 12px;
+                ">${label.name}</span>
+              `
+                  )
+                  .join('') || ''
+              }
+            </div>
+          `;
+        },
+      },
+      'user.login': {
+        ...baseConfig,
+        headerName: 'Author',
+        width: 150,
+        cellRenderer: (params: any) => {
+          const user = params.data.user;
+          return user
+            ? `
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <img src="${user.avatarUrl}" style="width: 20px; height: 20px; border-radius: 50%;">
+              <span>${user.login}</span>
+            </div>
+          `
+            : '';
+        },
+      },
+      assignees: {
+        ...baseConfig,
+        width: 200,
+        cellRenderer: (params: any) => {
+          return (
+            params.value
+              ?.map(
+                (assignee: any) => `
+            <img src="${assignee.avatarUrl}" 
+                 title="${assignee.login}"
+                 style="width: 20px; height: 20px; border-radius: 50%; margin-right: 4px;">
+          `
+              )
+              .join('') || ''
+          );
+        },
+      },
+      comments: {
+        ...baseConfig,
+        width: 120,
+        cellRenderer: (params: any) => {
+          return params.value
+            ? `
+            <div style="display: flex; align-items: center; gap: 4px;">
+              <span class="material-icons" style="font-size: 16px;">comment</span>
+              <span>${params.value}</span>
+            </div>
+          `
+            : '';
+        },
+      },
+    };
+
+    // Return special column config if exists
+    if (specialColumns[key]) {
+      return specialColumns[key];
+    }
+
+    // Handle dates
+    if (key.endsWith('At') || key.includes('date') || key.includes('dueOn')) {
+      return {
+        ...baseConfig,
+        width: 160,
+        valueFormatter: (params: any) => {
+          return params.value ? new Date(params.value).toLocaleString() : '';
+        },
+      };
+    }
+
+    // Default column config based on value type
+    return this.getDefaultColumnConfig(baseConfig, value);
+  }
+
+  // Helper method to get contrast color for labels
+  private getContrastColor(hexcolor: string): string {
+    const r = parseInt(hexcolor.slice(0, 2), 16);
+    const g = parseInt(hexcolor.slice(2, 4), 16);
+    const b = parseInt(hexcolor.slice(4, 6), 16);
+    const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+    return yiq >= 128 ? '#000' : '#fff';
+  }
+
+  getDataTypeOptions(): DataTypeOption[] {
+    if (this.repoSource === 'user') {
+      return this.dataTypeOptions.filter(
+        (option) => option.value !== 'members'
+      );
+    }
+    return this.dataTypeOptions;
+  }
+
+  // Add this helper function to flatten nested objects
+  private flattenObject(obj: any, prefix = ''): { [key: string]: any } {
+    const flattened: { [key: string]: any } = {};
+
+    for (const key in obj) {
+      if (obj.hasOwnProperty(key)) {
+        const value = obj[key];
+        const newKey = prefix ? `${prefix}_${key}` : key;
+
+        if (
+          value &&
+          typeof value === 'object' &&
+          !Array.isArray(value) &&
+          !(value instanceof Date)
+        ) {
+          Object.assign(flattened, this.flattenObject(value, newKey));
+        } else {
+          flattened[newKey] = value;
+        }
+      }
+    }
+
+    return flattened;
+  }
+
+  private getDefaultColumnConfig(baseConfig: ColDef, value: any): ColDef {
     if (value === null || value === undefined) {
       return { ...baseConfig, filter: 'agTextColumnFilter' };
     }
@@ -334,7 +657,6 @@ export class OrganizationsComponent implements OnInit {
           filterParams: {
             buttons: ['apply', 'reset'],
             closeOnApply: true,
-            allowedCharPattern: '\\d\\-\\.',
           },
         };
       case 'boolean':
@@ -343,48 +665,6 @@ export class OrganizationsComponent implements OnInit {
           filter: 'agSetColumnFilter',
           filterParams: {
             values: ['true', 'false'],
-          },
-        };
-      case 'object':
-        if (value instanceof Date) {
-          return {
-            ...baseConfig,
-            filter: 'agDateColumnFilter',
-            filterParams: {
-              buttons: ['apply', 'reset'],
-              closeOnApply: true,
-              comparator: (
-                filterLocalDateAtMidnight: Date,
-                cellValue: string
-              ) => {
-                const dateAsString = cellValue;
-                const dateParts = dateAsString.split('-');
-                const cellDate = new Date(
-                  Number(dateParts[0]),
-                  Number(dateParts[1]) - 1,
-                  Number(dateParts[2])
-                );
-                if (
-                  filterLocalDateAtMidnight.getTime() === cellDate.getTime()
-                ) {
-                  return 0;
-                }
-                if (cellDate < filterLocalDateAtMidnight) {
-                  return -1;
-                }
-                if (cellDate > filterLocalDateAtMidnight) {
-                  return 1;
-                }
-                return 0;
-              },
-            },
-          };
-        }
-        return {
-          ...baseConfig,
-          filter: 'agTextColumnFilter',
-          valueGetter: (params) => {
-            return JSON.stringify(params.data[key]);
           },
         };
       default:
@@ -397,14 +677,5 @@ export class OrganizationsComponent implements OnInit {
           },
         };
     }
-  }
-
-  getDataTypeOptions(): DataTypeOption[] {
-    if (this.repoSource === 'user') {
-      return this.dataTypeOptions.filter(
-        (option) => option.value !== 'members'
-      );
-    }
-    return this.dataTypeOptions;
   }
 }

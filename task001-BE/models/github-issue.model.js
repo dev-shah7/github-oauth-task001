@@ -11,14 +11,20 @@ const githubIssueSchema = new mongoose.Schema({
     required: true,
   },
   title: String,
-  state: String,
+  state: {
+    type: String,
+    index: true,
+  },
   user: {
     login: String,
     id: Number,
     avatarUrl: String,
   },
   body: String,
-  createdAt: Date,
+  createdAt: {
+    type: Date,
+    index: true,
+  },
   updatedAt: Date,
   closedAt: Date,
   labels: [
@@ -36,16 +42,34 @@ const githubIssueSchema = new mongoose.Schema({
       avatarUrl: String,
     },
   ],
+  milestone: {
+    title: String,
+    state: String,
+    dueOn: Date,
+    number: Number,
+  },
   comments: Number,
-  url: String,
-  htmlUrl: String,
+  isPullRequest: Boolean,
+  locked: Boolean,
+  activeLockReason: String,
+  authorAssociation: String,
   githubIntegrationId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "GitHubIntegration",
     required: true,
   },
+  pageInfo: {
+    page: Number,
+    pageSize: Number,
+    fetchedAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
 });
 
 githubIssueSchema.index({ repoId: 1, number: 1 }, { unique: true });
+githubIssueSchema.index({ createdAt: -1 });
+githubIssueSchema.index({ state: 1 });
 
 module.exports = mongoose.model("GithubIssue", githubIssueSchema);
