@@ -78,5 +78,15 @@
   </mat-expansion-panel>
 </mat-accordion>
 
-<!-- Organizations Component -->
-<app-organizations></app-organizations>
+<div class="app-container">
+  <mat-toolbar color="primary">
+    <span>GitHub Integration</span>
+    <span class="spacer"></span>
+    <button mat-button routerLink="/">Organizations</button>
+    <button mat-button routerLink="/relationships">Relationships</button>
+  </mat-toolbar>
+
+  <div class="content">
+    <router-outlet></router-outlet>
+  </div>
+</div>

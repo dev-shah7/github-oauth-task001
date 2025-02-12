@@ -6,6 +6,9 @@ import {
   transition,
   animate,
 } from '@angular/animations';
+import { RouterModule } from '@angular/router';
+import { MatToolbarModule } from '@angular/material/toolbar';
+import { MatButtonModule } from '@angular/material/button';
 // import { RouterOutlet } from '@angular/router';
 // import { AgGridAngular } from 'ag-grid-angular';
 import {
@@ -14,8 +17,6 @@ import {
   GridApi,
   GridReadyEvent,
 } from 'ag-grid-community';
-import { ClientSideRowModelModule } from 'ag-grid-community';
-import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { HttpClient, HttpClientModule } from '@angular/common/http';
 import { Observable, timer, Subscription } from 'rxjs';
@@ -29,7 +30,6 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { FormsModule } from '@angular/forms';
 import { AgGridModule } from 'ag-grid-angular';
-import { OrganizationsComponent } from './components/organizations/organizations.component';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { GithubService } from './services/github.service';
 
@@ -64,7 +64,8 @@ interface Integration {
   selector: 'app-root',
   standalone: true,
   imports: [
-    // RouterOutlet,
+    RouterModule,
+    MatToolbarModule,
     MatButtonModule,
     MatIconModule,
     HttpClientModule,
@@ -77,7 +78,6 @@ interface Integration {
     MatInputModule,
     FormsModule,
     AgGridModule,
-    OrganizationsComponent,
   ],
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss'],
@@ -106,7 +106,7 @@ export class AppComponent implements OnInit, OnDestroy {
   private apiUrl = 'http://localhost:3000/api';
   status$!: Observable<IntegrationStatus>;
   private statusSubscription?: Subscription;
-  title = 'Task 001';
+  title = 'GitHub Integration';
 
   integrations: Integration[] = [];
   selectedIntegration: string = '';

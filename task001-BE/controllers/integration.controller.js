@@ -13,6 +13,7 @@ const {
   handleIssues,
 } = require("../utils/dataHandlers");
 const axios = require("axios");
+const mongoose = require("mongoose");
 
 exports.getIntegrations = async (req, res) => {
   try {
@@ -663,6 +664,109 @@ exports.getUserRepoData = async (req, res) => {
     res.status(500).json({
       error: "Failed to fetch repository data",
       details: error.response?.data || error.message,
+    });
+  }
+};
+
+// Add this new function to handle relationship data
+async function fetchRepositoryRelationships(
+  integration,
+  repository,
+  page = 1,
+  pageSize = 20
+) {
+  try {
+    const GithubCommit = mongoose.model("GithubCommit");
+    const GithubPullRequest = mongoose.model("GithubPullRequest");
+    const GithubIssue = mongoose.model("GithubIssue");
+    const GithubRepository = mongoose.model("GithubRepository");
+
+    const repositories = await GithubRepository.find({
+      githubIntegrationId: integration._id,
+    }).lean();
+
+    const repoData = await Promise.all(
+      repositories.map(async (repo) => {
+        const [commits, pullRequests, issues] = await Promise.all([
+          GithubCommit.find({ repoId: repo.repoId })
+            .sort({ "commit.author.date": -1 })
+            .lean(),
+          GithubPullRequest.find({ repoId: repo.repoId })
+            .sort({ createdAt: -1 })
+            .lean(),
+          GithubIssue.find({ repoId: repo.repoId })
+            .sort({ createdAt: -1 })
+            .lean(),
+        ]);
+
+        return {
+          name: repo.name,
+          fullName: repo.fullName,
+          updatedAt: repo.updatedAt,
+          commits,
+          pullRequests,
+          issues,
+        };
+      })
+    );
+
+    return {
+      relationships: repoData,
+      totalCount: repositories.length,
+    };
+  } catch (error) {
+    console.error("Error in fetchRepositoryRelationships:", error);
+    throw error;
+  }
+}
+
+// Add new endpoint to fetch relationships
+exports.getRepositoryRelationships = async (req, res) => {
+  try {
+    const { owner, repo: repoName, page = 1, pageSize = 20 } = req.query;
+    const user = req.user || req.session?.user;
+
+    if (!user) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    const integration = await GitHubIntegration.findOne({
+      githubId: user.githubId,
+    });
+
+    if (!integration) {
+      return res.status(404).json({ error: "GitHub integration not found" });
+    }
+
+    const repository = await GithubRepository.findOne({
+      name: repoName,
+      "owner.login": owner,
+    });
+
+    if (!repository) {
+      return res.status(404).json({ error: "Repository not found" });
+    }
+
+    const relationships = await fetchRepositoryRelationships(
+      integration,
+      repository,
+      parseInt(page),
+      parseInt(pageSize)
+    );
+
+    return res.json({
+      data: relationships.relationships,
+      pagination: {
+        totalCount: relationships.totalCount,
+        currentPage: parseInt(page),
+        pageSize: parseInt(pageSize),
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching repository relationships:", error);
+    res.status(500).json({
+      error: "Failed to fetch repository relationships",
+      details: error.message,
     });
   }
 };

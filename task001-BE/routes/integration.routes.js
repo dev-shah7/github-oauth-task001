@@ -17,5 +17,9 @@ router.post(
 );
 router.get("/github/user/repos", integrationController.getUserRepos);
 router.post("/github/user/repo/:type", integrationController.getUserRepoData);
+router.get(
+  "/repository/:owner/:repo/relationships",
+  integrationController.getRepositoryRelationships
+);
 
 module.exports = router;
