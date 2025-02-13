@@ -257,9 +257,38 @@ export class OrganizationsComponent implements OnInit {
       next: (data) => {
         this.rowData = data;
         if (data.length > 0) {
-          this.columnDefs = Object.entries(data[0]).map(([key, value]) =>
-            this.getColumnDef(key, value)
+          // Flatten the first object to get all possible fields
+          const flattenedObject = this.flattenObject(data[0]);
+          this.columnDefs = Object.entries(flattenedObject).map(
+            ([key, value]) => ({
+              field: key,
+              headerName: this.formatColumnHeader(key),
+              sortable: true,
+              filter: true,
+              resizable: true,
+              flex: 1,
+              minWidth: 120,
+              valueFormatter: (params: any) => {
+                if (params.value instanceof Date) {
+                  return params.value.toLocaleString();
+                }
+                if (Array.isArray(params.value)) {
+                  return params.value
+                    .map((v: { name?: string; login?: string } | string) => {
+                      if (typeof v === 'object' && v !== null) {
+                        return v.name || v.login || '';
+                      }
+                      return v;
+                    })
+                    .join(', ');
+                }
+                return params.value;
+              },
+            })
           );
+
+          // Flatten all data objects
+          this.rowData = data.map((item) => this.flattenObject(item));
         }
         this.loading = false;
       },
@@ -284,7 +313,7 @@ export class OrganizationsComponent implements OnInit {
     return `${baseUrl}/${dataType}`;
   }
 
-  private formatHeaderName(key: string): string {
+  private formatColumnHeader(key: string): string {
     return key
       .split('_')
       .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
@@ -496,7 +525,7 @@ export class OrganizationsComponent implements OnInit {
   private getColumnDef(key: string, value: any): ColDef {
     const baseConfig: ColDef = {
       field: key,
-      headerName: this.formatHeaderName(key),
+      headerName: this.formatColumnHeader(key),
       sortable: true,
       filter: true,
       floatingFilter: true,
@@ -706,28 +735,21 @@ export class OrganizationsComponent implements OnInit {
   private flattenObject(obj: any, prefix = ''): { [key: string]: any } {
     const flattened: { [key: string]: any } = {};
 
-    const processValue = (value: any, key: string) => {
-      const newKey = prefix ? `${prefix}.${key}` : key;
+    Object.keys(obj || {}).forEach((key) => {
+      const value = obj[key];
+      const newKey = prefix ? `${prefix}_${key}` : key;
 
-      if (value && typeof value === 'object') {
-        if (Array.isArray(value)) {
-          // Keep arrays as is
-          flattened[newKey] = value;
-        } else if (value instanceof Date) {
-          flattened[newKey] = value;
-        } else {
-          Object.assign(flattened, this.flattenObject(value, newKey));
-        }
+      if (
+        value &&
+        typeof value === 'object' &&
+        !Array.isArray(value) &&
+        !(value instanceof Date)
+      ) {
+        Object.assign(flattened, this.flattenObject(value, newKey));
       } else {
         flattened[newKey] = value;
       }
-    };
-
-    for (const key in obj) {
-      if (obj.hasOwnProperty(key)) {
-        processValue(obj[key], key);
-      }
-    }
+    });
 
     return flattened;
   }

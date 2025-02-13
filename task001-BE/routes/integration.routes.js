@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const integrationController = require("../controllers/integration.controller");
-
+const relationshipsController = require("../controllers/relationships.controller");
 router.get("/", integrationController.getIntegrations);
 router.get(
   "/github/organizations",
@@ -18,8 +18,8 @@ router.post(
 router.get("/github/user/repos", integrationController.getUserRepos);
 router.post("/github/user/repo/:type", integrationController.getUserRepoData);
 router.get(
-  "/repository/:owner/:repo/relationships",
-  integrationController.getRepositoryRelationships
+  "/repository/relationships",
+  relationshipsController.getRepositoryRelationships
 );
 
 module.exports = router;

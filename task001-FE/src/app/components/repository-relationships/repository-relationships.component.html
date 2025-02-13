@@ -1,0 +1,31 @@
+<div class="filters-container">
+  <mat-form-field appearance="outline" class="search-field">
+    <mat-label>Search across all fields</mat-label>
+    <input
+      matInput
+      [(ngModel)]="searchText"
+      (ngModelChange)="onSearchChange($event)"
+      placeholder="Search..."
+    />
+  </mat-form-field>
+</div>
+
+<div class="repository-info" *ngIf="repositoryInfo">
+  <h2>{{ repositoryInfo.fullName }}</h2>
+  <p>{{ repositoryInfo.description }}</p>
+  <p>Last updated: {{ repositoryInfo.updatedAt | date }}</p>
+</div>
+
+<div class="grid-container">
+  <ag-grid-angular
+    class="ag-theme-material relationships-grid"
+    [rowData]="combinedData"
+    [columnDefs]="columnDefs"
+    [defaultColDef]="defaultColDef"
+    [gridOptions]="gridOptions"
+    [pagination]="true"
+    [paginationPageSize]="20"
+    (gridReady)="onGridReady($event)"
+  >
+  </ag-grid-angular>
+</div>
