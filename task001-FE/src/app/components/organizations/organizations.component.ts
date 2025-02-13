@@ -25,6 +25,16 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { FormsModule } from '@angular/forms';
 import { Subject, debounceTime, distinctUntilChanged } from 'rxjs';
+import { MatChipsModule } from '@angular/material/chips';
+import { ReactiveFormsModule, FormGroup, FormBuilder } from '@angular/forms';
+import { MatExpansionModule } from '@angular/material/expansion';
+import { MatCheckboxModule } from '@angular/material/checkbox';
+import { startOfDay, endOfDay } from 'date-fns';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { catchError, finalize } from 'rxjs/operators';
+import { throwError } from 'rxjs';
+import { MatCardModule } from '@angular/material/card';
 
 ModuleRegistry.registerModules([
   ClientSideRowModelModule,
@@ -101,6 +111,12 @@ interface GithubIssue {
     MatIconModule,
     MatButtonModule,
     FormsModule,
+    MatChipsModule,
+    ReactiveFormsModule,
+    MatExpansionModule,
+    MatCheckboxModule,
+    MatProgressSpinnerModule,
+    MatCardModule,
   ],
   templateUrl: './organizations.component.html',
   styleUrls: ['./organizations.component.scss'],
@@ -112,7 +128,7 @@ export class OrganizationsComponent implements OnInit {
   selectedOrg: string = '';
   selectedDataType: string = '';
   loading = false;
-  error: string | null = null;
+  error: { title: string; message: string } | null = null;
   rowData: any[] = [];
   columnDefs: ColDef[] = [];
   selectedRepo: Repository | null = null;
@@ -178,30 +194,62 @@ export class OrganizationsComponent implements OnInit {
   public isLoading = false;
   private gridApi: any = null;
 
-  constructor(private http: HttpClient) {}
+  // Add these for faceted search
+  facets = {
+    status: new Set<string>(),
+    users: new Set<string>(),
+    labels: new Set<string>(),
+    types: new Set<string>(),
+  };
 
-  ngOnInit(): void {
-    this.fetchOrganizations();
+  // Add this property to expose Array to template
+  protected readonly Array = Array;
+
+  // Add Math to component
+  protected readonly Math = Math;
+
+  constructor(private http: HttpClient, private snackBar: MatSnackBar) {
     this.setupSearch();
   }
 
-  private fetchOrganizations(): void {
-    this.loading = true;
+  ngOnInit(): void {
+    this.fetchOrganizations();
+  }
+
+  // Make fetchOrganizations public
+  public fetchOrganizations(): void {
+    this.isLoading = true;
     this.error = null;
 
     this.http
       .get<any[]>(`${environment.apiUrl}/integrations/github/organizations`, {
         withCredentials: true,
       })
+      .pipe(
+        catchError((error) => {
+          if (error.status === 401) {
+            this.error = {
+              title: 'Authentication Error',
+              message: 'Please log in to access organization data.',
+            };
+          } else {
+            this.error = {
+              title: 'Error Loading Organizations',
+              message: 'Failed to load organizations. Please try again.',
+            };
+          }
+          return throwError(() => error);
+        }),
+        finalize(() => {
+          this.isLoading = false;
+        })
+      )
       .subscribe({
         next: (data) => {
           this.organizations = data;
-          this.loading = false;
-        },
-        error: (err) => {
-          console.error('Error fetching organizations:', err);
-          this.error = 'Failed to load organizations';
-          this.loading = false;
+          this.snackBar.open('Organizations loaded successfully', 'Close', {
+            duration: 3000,
+          });
         },
       });
   }
@@ -248,7 +296,7 @@ export class OrganizationsComponent implements OnInit {
     )
       return;
 
-    this.loading = true;
+    this.isLoading = true;
     this.error = null;
 
     const endpoint = this.getEndpoint(this.selectedDataType);
@@ -290,12 +338,15 @@ export class OrganizationsComponent implements OnInit {
           // Flatten all data objects
           this.rowData = data.map((item) => this.flattenObject(item));
         }
-        this.loading = false;
+        this.isLoading = false;
       },
       error: (err) => {
         console.error('Error fetching data:', err);
-        this.error = 'Failed to load data';
-        this.loading = false;
+        this.error = {
+          title: 'Error Loading Data',
+          message: 'Failed to load data. Please try again.',
+        };
+        this.isLoading = false;
       },
     });
   }
@@ -321,7 +372,7 @@ export class OrganizationsComponent implements OnInit {
   }
 
   loadRepositories() {
-    this.loading = true;
+    this.isLoading = true;
     this.error = null;
 
     const endpoint =
@@ -332,12 +383,15 @@ export class OrganizationsComponent implements OnInit {
     this.http.get<Repository[]>(endpoint, { withCredentials: true }).subscribe({
       next: (data) => {
         this.repositories = data;
-        this.loading = false;
+        this.isLoading = false;
       },
       error: (err) => {
         console.error('Error fetching repositories:', err);
-        this.error = 'Failed to load repositories';
-        this.loading = false;
+        this.error = {
+          title: 'Error Loading Repositories',
+          message: 'Failed to load repositories. Please try again.',
+        };
+        this.isLoading = false;
       },
     });
   }
@@ -396,17 +450,22 @@ export class OrganizationsComponent implements OnInit {
       }
     } catch (error) {
       console.error('Error updating grid:', error);
-      this.error = 'Error updating grid display';
+      this.error = {
+        title: 'Error Updating Grid',
+        message: 'Failed to update grid display. Please try again.',
+      };
     }
   }
 
-  // Update loadRepoData method with correct grid API calls
+  // Update loadRepoData method to properly handle facets
   loadRepoData() {
     if (!this.selectedRepo || !this.selectedSubType || this.isLoading) return;
 
     this.isLoading = true;
     this.error = null;
-    this.columnDefs = [];
+
+    // Clear existing facets before loading new data
+    this.clearFacets();
 
     const endpoint =
       this.repoSource === 'user'
@@ -432,6 +491,9 @@ export class OrganizationsComponent implements OnInit {
         next: (response) => {
           try {
             this.rowData = response.data;
+            // Update facets before processing the grid data
+            this.updateFacets(response.data);
+
             this.totalRecords = response?.pagination?.totalRecords || 0;
 
             this.canGoPrevious = this.currentPage > 1;
@@ -454,18 +516,22 @@ export class OrganizationsComponent implements OnInit {
                     const owner = this.selectedRepo?.owner?.login || '';
                     const repo = this.selectedRepo?.name || '';
                     const baseUrl = window.location.origin;
-                    return `<a href="${baseUrl}/find-user?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}&issueNumber=${params.data.issueNumber}" 
-                              target="_blank" 
-                              style="color: #1976d2; text-decoration: underline;">
-                              Find User
-                           </a>`;
-                  }
+                    return `<a href="${baseUrl}/find-user?owner=${encodeURIComponent(
+                      owner
+                    )}&repo=${encodeURIComponent(repo)}&issueNumber=${
+                      params.data.issueNumber
+                    }" 
+                            target="_blank" 
+                            style="color: #1976d2; text-decoration: underline;">
+                            Find User
+                         </a>`;
+                  },
                 });
               }
 
               if (this.gridApi) {
                 this.gridApi.setGridOption('columnDefs', this.columnDefs);
-                
+
                 const flattenedData = this.rowData.map((item) =>
                   this.flattenObject(item)
                 );
@@ -486,7 +552,10 @@ export class OrganizationsComponent implements OnInit {
             this.isLoading = false;
           } catch (error) {
             console.error('Error processing response:', error);
-            this.error = 'Error processing data';
+            this.error = {
+              title: 'Error Processing Data',
+              message: 'Failed to process data. Please try again.',
+            };
             this.isLoading = false;
             if (this.gridApi) {
               this.gridApi.hideOverlay();
@@ -495,7 +564,10 @@ export class OrganizationsComponent implements OnInit {
         },
         error: (err) => {
           console.error('Error fetching repo data:', err);
-          this.error = 'Failed to load repository data';
+          this.error = {
+            title: 'Error Loading Repository Data',
+            message: 'Failed to load repository data. Please try again.',
+          };
           this.isLoading = false;
           if (this.gridApi) {
             this.gridApi.hideOverlay();
@@ -937,12 +1009,29 @@ export class OrganizationsComponent implements OnInit {
     }
 
     // Handle dates
-    if (key.endsWith('At') || key.includes('date') || key.includes('dueOn')) {
+    if (
+      key.toLowerCase().includes('date') ||
+      key.toLowerCase().includes('at') ||
+      key === 'commit.author.date'
+    ) {
       return {
         ...baseConfig,
-        width: 160,
-        valueFormatter: (params: any) => {
-          return params.value ? new Date(params.value).toLocaleString() : '';
+        filter: 'agDateColumnFilter',
+        filterParams: {
+          filterOptions: ['inRange'],
+          inRangeInclusive: true,
+          comparator: (filterDate: Date, cellValue: string) => {
+            if (!cellValue) return -1;
+            const cellDate = new Date(cellValue);
+            const filterDateTime = filterDate.getTime();
+            const cellDateTime = cellDate.getTime();
+            if (cellDateTime === filterDateTime) return 0;
+            return cellDateTime > filterDateTime ? 1 : -1;
+          },
+        },
+        valueFormatter: (params) => {
+          if (!params.value) return '';
+          return new Date(params.value).toLocaleString();
         },
       };
     }
@@ -1046,5 +1135,58 @@ export class OrganizationsComponent implements OnInit {
     const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  }
+
+  // Add method to clear facets
+  private clearFacets() {
+    Object.values(this.facets).forEach((set) => set.clear());
+  }
+
+  // Update updateFacets method to handle different data types
+  private updateFacets(data: any[]) {
+    this.clearFacets();
+
+    data.forEach((item) => {
+      // Handle status
+      if (item.state) {
+        this.facets.status.add(item.state.toLowerCase());
+      }
+
+      // Handle type based on the selected subtype
+      if (this.selectedSubType) {
+        this.facets.types.add(this.selectedSubType);
+      }
+
+      // Handle users
+      if (item.user?.login) {
+        this.facets.users.add(item.user.login);
+      } else if (item.author?.login) {
+        this.facets.users.add(item.author.login);
+      }
+
+      // Handle labels
+      if (Array.isArray(item.labels)) {
+        item.labels.forEach((label: any) => {
+          if (label.name) {
+            this.facets.labels.add(label.name);
+          }
+        });
+      }
+    });
+
+    // Log facets for debugging
+    console.log('Updated facets:', {
+      status: Array.from(this.facets.status),
+      users: Array.from(this.facets.users),
+      labels: Array.from(this.facets.labels),
+      types: Array.from(this.facets.types),
+    });
+  }
+
+  // Add onGridSizeChanged method
+  public onGridSizeChanged(params: any): void {
+    if (this.gridApi) {
+      this.gridApi.sizeColumnsToFit();
+    }
   }
 }

@@ -1,143 +1,169 @@
+<div class="loading-overlay" *ngIf="isLoading">
+  <mat-spinner class="spinner"></mat-spinner>
+</div>
+
 <div class="organizations">
-  <div class="controls">
-    <mat-form-field>
-      <mat-label>Repository Source</mat-label>
-      <mat-select [(ngModel)]="repoSource" (selectionChange)="onOrgChange()">
-        <mat-option value="organization">Organization</mat-option>
-        <mat-option value="user">User</mat-option>
-      </mat-select>
-    </mat-form-field>
-
-    <mat-form-field
-      *ngIf="repoSource === 'organization' && organizations.length"
+  <div class="error-container" *ngIf="error">
+    <div class="error-title">{{ error.title }}</div>
+    <p class="error-message">{{ error.message }}</p>
+    <button
+      mat-raised-button
+      color="primary"
+      class="retry-button"
+      (click)="fetchOrganizations()"
     >
-      <mat-label>Select Organization</mat-label>
-      <mat-select [(ngModel)]="selectedOrg" (selectionChange)="onOrgChange()">
-        <mat-option *ngFor="let org of organizations" [value]="org.orgId">
-          {{ org.name }}
-        </mat-option>
-      </mat-select>
-    </mat-form-field>
-
-    <mat-form-field *ngIf="repoSource === 'user' || selectedOrg">
-      <mat-label>Select Data Type</mat-label>
-      <mat-select
-        [(ngModel)]="selectedDataType"
-        (selectionChange)="onDataTypeChange()"
-      >
-        <mat-option
-          *ngFor="let option of getDataTypeOptions()"
-          [value]="option.value"
-        >
-          {{ option.label }}
-        </mat-option>
-      </mat-select>
-    </mat-form-field>
-
-    <mat-form-field
-      *ngIf="selectedDataType === 'repo-data' && repositories?.length"
-    >
-      <mat-label>Select Repository</mat-label>
-      <mat-select [(ngModel)]="selectedRepo" (selectionChange)="onRepoChange()">
-        <mat-option *ngFor="let repo of repositories" [value]="repo">
-          {{ repo.name }}
-        </mat-option>
-      </mat-select>
-    </mat-form-field>
-
-    <mat-form-field *ngIf="selectedRepo">
-      <mat-label>Select Data Type</mat-label>
-      <mat-select
-        [(ngModel)]="selectedSubType"
-        (selectionChange)="loadRepoData()"
-      >
-        <mat-option
-          *ngFor="let subType of getRepoDataTypes()"
-          [value]="subType.value"
-        >
-          {{ subType.label }}
-        </mat-option>
-      </mat-select>
-    </mat-form-field>
+      Retry
+    </button>
   </div>
 
-  <div class="table-controls" *ngIf="!loading && !error && rowData.length">
-    <mat-form-field appearance="outline">
-      <mat-label>Search</mat-label>
-      <input
-        matInput
-        [(ngModel)]="searchText"
-        (ngModelChange)="onSearchChange($event)"
-        placeholder="Search in all columns..."
-      />
-      <button
-        *ngIf="searchText"
-        matSuffix
-        mat-icon-button
-        aria-label="Clear"
-        (click)="clearSearch()"
-      >
-        <mat-icon>close</mat-icon>
-      </button>
-    </mat-form-field>
-  </div>
-
-  <div *ngIf="loading">Loading...</div>
-  <div *ngIf="error">{{ error }}</div>
-
-  <div class="table-container">
-    <ag-grid-angular
-      *ngIf="!error && rowData.length"
-      class="ag-theme-material"
-      [rowData]="rowData"
-      [columnDefs]="columnDefs"
-      [defaultColDef]="defaultColDef"
-      [gridOptions]="gridOptions"
-      [quickFilterText]="searchText"
-      [enableRangeSelection]="true"
-      [animateRows]="true"
-      domLayout="autoHeight"
-      [suppressHorizontalScroll]="false"
-      [suppressMovableColumns]="false"
-      [suppressColumnVirtualisation]="true"
-      style="width: 100%; height: 100%"
-    >
-    </ag-grid-angular>
-
-    <!-- Add pagination controls -->
-    <div class="pagination-controls" *ngIf="!error && rowData.length">
-      <div class="page-size">
-        <mat-form-field>
-          <mat-label>Items per page</mat-label>
+  <mat-card class="controls-card" *ngIf="!error">
+    <mat-card-content>
+      <div class="controls">
+        <mat-form-field appearance="outline">
+          <mat-label>Repository Source</mat-label>
           <mat-select
-            [value]="pageSize"
-            (selectionChange)="onPageSizeChange($event.value)"
+            [(ngModel)]="repoSource"
+            (selectionChange)="onOrgChange()"
           >
-            <mat-option [value]="10">10</mat-option>
-            <mat-option [value]="20">20</mat-option>
+            <mat-option value="organization">Organization</mat-option>
+            <mat-option value="user">User</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field
+          *ngIf="repoSource === 'organization' && organizations.length"
+        >
+          <mat-label>Select Organization</mat-label>
+          <mat-select
+            [(ngModel)]="selectedOrg"
+            (selectionChange)="onOrgChange()"
+          >
+            <mat-option *ngFor="let org of organizations" [value]="org.orgId">
+              {{ org.name }}
+            </mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field *ngIf="repoSource === 'user' || selectedOrg">
+          <mat-label>Select Data Type</mat-label>
+          <mat-select
+            [(ngModel)]="selectedDataType"
+            (selectionChange)="onDataTypeChange()"
+          >
+            <mat-option
+              *ngFor="let option of getDataTypeOptions()"
+              [value]="option.value"
+            >
+              {{ option.label }}
+            </mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field
+          *ngIf="selectedDataType === 'repo-data' && repositories?.length"
+        >
+          <mat-label>Select Repository</mat-label>
+          <mat-select
+            [(ngModel)]="selectedRepo"
+            (selectionChange)="onRepoChange()"
+          >
+            <mat-option *ngFor="let repo of repositories" [value]="repo">
+              {{ repo.name }}
+            </mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field *ngIf="selectedRepo">
+          <mat-label>Select Data Type</mat-label>
+          <mat-select
+            [(ngModel)]="selectedSubType"
+            (selectionChange)="loadRepoData()"
+          >
+            <mat-option
+              *ngFor="let subType of getRepoDataTypes()"
+              [value]="subType.value"
+            >
+              {{ subType.label }}
+            </mat-option>
           </mat-select>
         </mat-form-field>
       </div>
+    </mat-card-content>
+  </mat-card>
 
-      <div class="navigation-buttons">
-        <button
-          mat-icon-button
-          [disabled]="!canGoPrevious || isLoading"
-          (click)="goToPreviousPage()"
-          aria-label="Previous page"
-        >
-          <mat-icon>chevron_left</mat-icon>
-        </button>
-        <span class="current-page">Page {{ currentPage }}</span>
-        <button
-          mat-icon-button
-          [disabled]="!canGoNext || isLoading"
-          (click)="goToNextPage()"
-          aria-label="Next page"
-        >
-          <mat-icon>chevron_right</mat-icon>
-        </button>
+  <mat-card class="table-card" *ngIf="!error && rowData.length">
+    <mat-card-content>
+      <div class="table-controls">
+        <div class="search-container">
+          <mat-form-field appearance="outline">
+            <mat-label>Search</mat-label>
+            <input
+              matInput
+              [(ngModel)]="searchText"
+              (ngModelChange)="onSearchChange($event)"
+              placeholder="Search in all columns..."
+            />
+            <button
+              *ngIf="searchText"
+              matSuffix
+              mat-icon-button
+              aria-label="Clear"
+              (click)="clearSearch()"
+            >
+              <mat-icon>close</mat-icon>
+            </button>
+          </mat-form-field>
+        </div>
       </div>
-    </div>
+
+      <div class="table-container">
+        <ag-grid-angular
+          class="ag-theme-material"
+          [rowData]="rowData"
+          [columnDefs]="columnDefs"
+          [defaultColDef]="defaultColDef"
+          [gridOptions]="gridOptions"
+          [quickFilterText]="searchText"
+          [enableRangeSelection]="true"
+          [animateRows]="true"
+          [suppressHorizontalScroll]="false"
+          [suppressMovableColumns]="false"
+          [suppressColumnVirtualisation]="true"
+          (gridSizeChanged)="onGridSizeChanged($event)"
+        >
+        </ag-grid-angular>
+      </div>
+
+      <div class="pagination-controls">
+        <div class="page-info">
+          Showing {{ (currentPage - 1) * pageSize + 1 }} -
+          {{ Math.min(currentPage * pageSize, totalRecords) }} of
+          {{ totalRecords }}
+        </div>
+        <div class="navigation-buttons">
+          <button
+            mat-icon-button
+            [disabled]="!canGoPrevious || isLoading"
+            (click)="goToPreviousPage()"
+            aria-label="Previous page"
+          >
+            <mat-icon>chevron_left</mat-icon>
+          </button>
+          <span class="current-page">Page {{ currentPage }}</span>
+          <button
+            mat-icon-button
+            [disabled]="!canGoNext || isLoading"
+            (click)="goToNextPage()"
+            aria-label="Next page"
+          >
+            <mat-icon>chevron_right</mat-icon>
+          </button>
+        </div>
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  <div class="no-data-message" *ngIf="!isLoading && !error && !rowData.length">
+    No data available. Please select an organization and data type.
   </div>
 </div>

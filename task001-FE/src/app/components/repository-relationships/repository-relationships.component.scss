@@ -1,12 +1,50 @@
 .filters-container {
-  margin-bottom: 20px;
   display: flex;
-  gap: 20px;
-}
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 16px;
+  background: #f5f5f5;
+  border-radius: 4px;
+  margin-bottom: 16px;
 
-.search-field {
-  width: 100%;
-  max-width: 500px;
+  @media (max-width: 768px) {
+    flex-direction: column;
+    padding: 12px;
+  }
+
+  .search-field {
+    flex: 1;
+    min-width: 200px;
+
+    @media (max-width: 768px) {
+      width: 100%;
+    }
+  }
+
+  .date-range-filter {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+
+    @media (max-width: 768px) {
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    mat-form-field {
+      min-width: 160px;
+      @media (max-width: 768px) {
+        width: 100%;
+      }
+    }
+  }
+
+  mat-form-field {
+    min-width: 160px;
+    @media (max-width: 768px) {
+      width: 100%;
+    }
+  }
 }
 
 .repository-info {
@@ -14,11 +52,28 @@
   padding: 15px;
   background: #f5f5f5;
   border-radius: 4px;
+
+  @media (max-width: 768px) {
+    padding: 12px;
+  }
+
+  h2 {
+    margin: 0 0 10px;
+    font-size: 1.5rem;
+
+    @media (max-width: 768px) {
+      font-size: 1.2rem;
+    }
+  }
 }
 
 .grid-container {
   height: 700px;
   width: 100%;
+
+  @media (max-width: 768px) {
+    height: 500px;
+  }
 }
 
 .relationships-grid {
@@ -100,5 +155,66 @@
   .ag-details-row {
     padding: 20px;
     background: white;
+  }
+}
+
+// Loading and error states
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.8);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+
+  .spinner {
+    width: 50px;
+    height: 50px;
+  }
+}
+
+.error-container {
+  padding: 16px;
+  margin: 16px 0;
+  background-color: #fee;
+  border: 1px solid #fcc;
+  border-radius: 4px;
+  color: #c00;
+
+  .error-title {
+    font-weight: bold;
+    margin-bottom: 8px;
+  }
+
+  .error-message {
+    margin: 0;
+  }
+
+  .retry-button {
+    margin-top: 12px;
+  }
+}
+
+// AG Grid mobile optimizations
+::ng-deep {
+  .ag-theme-material {
+    @media (max-width: 768px) {
+      .ag-header-cell {
+        padding: 8px;
+      }
+
+      .ag-cell {
+        padding: 8px;
+        font-size: 14px;
+      }
+
+      .ag-row {
+        height: auto !important;
+      }
+    }
   }
 }

@@ -9,6 +9,13 @@ import { environment } from '../../../environments/environment';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { Subject, debounceTime, distinctUntilChanged } from 'rxjs';
+import { MatDatepickerModule } from '@angular/material/datepicker';
+import { MatNativeDateModule } from '@angular/material/core';
+import { MatSelectModule } from '@angular/material/select';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { catchError, finalize } from 'rxjs/operators';
+import { throwError } from 'rxjs';
 
 // Register required AG Grid modules
 ModuleRegistry.registerModules([ClientSideRowModelModule, PaginationModule]);
@@ -39,6 +46,15 @@ interface RelationshipsResponse {
     pageSize: number;
     totalPages: number;
   };
+}
+
+interface FilterState {
+  dateRange: {
+    start: Date | null;
+    end: Date | null;
+  };
+  status: string[];
+  type: string[];
 }
 
 @Component({
@@ -187,6 +203,10 @@ export class DetailCellRendererComponent {
     FormsModule,
     MatFormFieldModule,
     MatInputModule,
+    MatDatepickerModule,
+    MatNativeDateModule,
+    MatSelectModule,
+    MatProgressSpinnerModule,
   ],
   templateUrl: './repository-relationships.component.html',
   styleUrls: ['./repository-relationships.component.scss'],
@@ -194,7 +214,6 @@ export class DetailCellRendererComponent {
 export class RepositoryRelationshipsComponent implements OnInit {
   private gridApi!: GridApi;
   searchText: string = '';
-  private searchSubject = new Subject<string>();
   combinedData: any[] = [];
   repositoryInfo: {
     name: string;
@@ -210,6 +229,27 @@ export class RepositoryRelationshipsComponent implements OnInit {
     resizable: true,
     floatingFilter: true,
     autoHeight: true,
+    getQuickFilterText: (params) => {
+      // Handle special cases for cells with custom renderers
+      if (params.colDef.field === 'type' || params.colDef.field === 'state') {
+        return params.value;
+      }
+      if (params.colDef.field === 'identifier') {
+        return params.data.type === 'Commit'
+          ? params.value
+          : '#' + params.value;
+      }
+      if (params.colDef.field === 'title' && params.data.labels) {
+        const labelText = params.data.labels
+          .map((label: any) => label.name)
+          .join(' ');
+        return `${params.value} ${labelText}`;
+      }
+      if (params.colDef.field === 'date') {
+        return params.value ? new Date(params.value).toLocaleString() : '';
+      }
+      return params.value;
+    },
   };
 
   gridOptions = {
@@ -219,6 +259,9 @@ export class RepositoryRelationshipsComponent implements OnInit {
     components: {
       detailCellRenderer: DetailCellRendererComponent,
     },
+    quickFilterText: '',
+    enableCellTextSelection: true,
+    ensureDomOrder: true,
   };
 
   columnDefs: ColDef[] = [
@@ -315,9 +358,23 @@ export class RepositoryRelationshipsComponent implements OnInit {
     },
   ];
 
-  constructor(private http: HttpClient) {
-    this.setupSearch();
-  }
+  filters: FilterState = {
+    dateRange: {
+      start: null,
+      end: null,
+    },
+    status: [],
+    type: [],
+  };
+
+  statusOptions = ['open', 'closed', 'merged'];
+  typeOptions = ['Commit', 'PR', 'Issue'];
+
+  // Add loading and error state properties
+  isLoading = false;
+  error: { title: string; message: string } | null = null;
+
+  constructor(private http: HttpClient, private snackBar: MatSnackBar) {}
 
   ngOnInit() {
     this.loadRelationships();
@@ -328,22 +385,17 @@ export class RepositoryRelationshipsComponent implements OnInit {
     params.api.sizeColumnsToFit();
   }
 
-  private setupSearch(): void {
-    this.searchSubject
-      .pipe(debounceTime(300), distinctUntilChanged())
-      .subscribe((searchText) => {
-        if (this.gridApi) {
-          (this.gridApi as any).setQuickFilter(searchText);
-        }
-      });
-  }
-
   onSearchChange(value: string) {
     this.searchText = value;
-    this.searchSubject.next(value);
+    if (this.gridApi) {
+      this.gridApi.setGridOption('quickFilterText', value);
+    }
   }
 
   loadRelationships() {
+    this.isLoading = true;
+    this.error = null;
+
     const owner = 'dev-shahh';
     const repo = 'analytics';
 
@@ -351,19 +403,57 @@ export class RepositoryRelationshipsComponent implements OnInit {
       owner,
       repo,
       page: '1',
-      pageSize: '100', // This is limiting the data to 100 records
+      pageSize: '100',
     });
+
+    // Add filters to query params
+    if (this.filters.dateRange.start) {
+      queryParams.append(
+        'startDate',
+        this.filters.dateRange.start.toISOString()
+      );
+    }
+    if (this.filters.dateRange.end) {
+      queryParams.append('endDate', this.filters.dateRange.end.toISOString());
+    }
+    if (this.filters.status.length > 0) {
+      queryParams.append('state', this.filters.status.join(','));
+    }
 
     this.http
       .get<RelationshipsResponse>(
         `${environment.apiUrl}/integrations/repository/relationships?${queryParams}`,
         { withCredentials: true }
       )
+      .pipe(
+        catchError((error) => {
+          console.error('Error loading relationships:', error);
+          if (error.status === 401) {
+            this.error = {
+              title: 'Authentication Error',
+              message: 'Please log in to access this data.',
+            };
+          } else if (error.status === 404) {
+            this.error = {
+              title: 'Not Found',
+              message: 'The requested repository data could not be found.',
+            };
+          } else {
+            this.error = {
+              title: 'Error Loading Data',
+              message: 'Failed to load repository data. Please try again.',
+            };
+          }
+          return throwError(() => error);
+        }),
+        finalize(() => {
+          this.isLoading = false;
+        })
+      )
       .subscribe({
         next: (response) => {
           this.repositoryInfo = response.repository;
-          // Transform and combine the data
-          this.combinedData = [
+          let transformedData = [
             ...response.relationships.commits.data.map((commit) => ({
               type: 'Commit',
               identifier: commit.sha,
@@ -398,10 +488,59 @@ export class RepositoryRelationshipsComponent implements OnInit {
               details: issue,
             })),
           ];
-        },
-        error: (error) => {
-          console.error('Error loading relationships:', error);
+
+          // Apply type filter if selected
+          if (this.filters.type.length > 0) {
+            transformedData = transformedData.filter((item) =>
+              this.filters.type.includes(item.type)
+            );
+          }
+
+          this.combinedData = transformedData;
+
+          // Show success message
+          this.snackBar.open('Data loaded successfully', 'Close', {
+            duration: 3000,
+          });
         },
       });
+  }
+
+  // Add retry method
+  retryLoad() {
+    this.loadRelationships();
+  }
+
+  // Add method to handle grid size changes
+  onGridSizeChanged(params: any) {
+    if (this.gridApi) {
+      // Fit columns on screen size change
+      this.gridApi.sizeColumnsToFit();
+    }
+  }
+
+  // Add new methods for filter handling
+  onDateRangeChange() {
+    this.loadRelationships();
+  }
+
+  onStatusChange() {
+    this.loadRelationships();
+  }
+
+  onTypeChange() {
+    this.loadRelationships();
+  }
+
+  clearFilters() {
+    this.filters = {
+      dateRange: {
+        start: null,
+        end: null,
+      },
+      status: [],
+      type: [],
+    };
+    this.loadRelationships();
   }
 }

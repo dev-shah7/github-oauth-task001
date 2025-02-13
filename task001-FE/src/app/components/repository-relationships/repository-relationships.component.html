@@ -8,6 +8,66 @@
       placeholder="Search..."
     />
   </mat-form-field>
+
+  <div class="date-range-filter">
+    <mat-form-field appearance="outline">
+      <mat-label>Start date</mat-label>
+      <input
+        matInput
+        [matDatepicker]="startPicker"
+        [(ngModel)]="filters.dateRange.start"
+        (dateChange)="onDateRangeChange()"
+      />
+      <mat-datepicker-toggle
+        matSuffix
+        [for]="startPicker"
+      ></mat-datepicker-toggle>
+      <mat-datepicker #startPicker></mat-datepicker>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>End date</mat-label>
+      <input
+        matInput
+        [matDatepicker]="endPicker"
+        [(ngModel)]="filters.dateRange.end"
+        (dateChange)="onDateRangeChange()"
+      />
+      <mat-datepicker-toggle
+        matSuffix
+        [for]="endPicker"
+      ></mat-datepicker-toggle>
+      <mat-datepicker #endPicker></mat-datepicker>
+    </mat-form-field>
+  </div>
+
+  <mat-form-field appearance="outline">
+    <mat-label>Status</mat-label>
+    <mat-select
+      [(ngModel)]="filters.status"
+      multiple
+      (selectionChange)="onStatusChange()"
+    >
+      <mat-option *ngFor="let status of statusOptions" [value]="status">
+        {{ status }}
+      </mat-option>
+    </mat-select>
+  </mat-form-field>
+
+  <mat-form-field appearance="outline">
+    <mat-label>Type</mat-label>
+    <mat-select
+      [(ngModel)]="filters.type"
+      multiple
+      (selectionChange)="onTypeChange()"
+    >
+      <mat-option *ngFor="let type of typeOptions" [value]="type">
+        {{ type }}
+      </mat-option>
+    </mat-select>
+  </mat-form-field>
+
+  <button mat-button (click)="clearFilters()">Clear Filters</button>
 </div>
 
 <div class="repository-info" *ngIf="repositoryInfo">
@@ -16,8 +76,29 @@
   <p>Last updated: {{ repositoryInfo.updatedAt | date }}</p>
 </div>
 
+<!-- Add loading overlay -->
+<div class="loading-overlay" *ngIf="isLoading">
+  <mat-spinner class="spinner"></mat-spinner>
+</div>
+
+<!-- Add error display -->
+<div class="error-container" *ngIf="error">
+  <div class="error-title">{{ error.title }}</div>
+  <p class="error-message">{{ error.message }}</p>
+  <button
+    mat-raised-button
+    color="primary"
+    class="retry-button"
+    (click)="retryLoad()"
+  >
+    Retry
+  </button>
+</div>
+
+<!-- Update grid container -->
 <div class="grid-container">
   <ag-grid-angular
+    *ngIf="!error && combinedData.length"
     class="ag-theme-material relationships-grid"
     [rowData]="combinedData"
     [columnDefs]="columnDefs"
@@ -26,6 +107,16 @@
     [pagination]="true"
     [paginationPageSize]="20"
     (gridReady)="onGridReady($event)"
+    (gridSizeChanged)="onGridSizeChanged($event)"
+    domLayout="autoHeight"
   >
   </ag-grid-angular>
+</div>
+
+<!-- Add no data message -->
+<div
+  class="no-data-message"
+  *ngIf="!isLoading && !error && !combinedData.length"
+>
+  No data available. Try adjusting your filters.
 </div>
