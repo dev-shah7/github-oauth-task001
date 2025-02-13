@@ -490,68 +490,34 @@ export class OrganizationsComponent implements OnInit {
       .subscribe({
         next: (response) => {
           try {
-            this.rowData = response.data;
-            // Update facets before processing the grid data
-            this.updateFacets(response.data);
+            // Transform the data based on the selected subtype
+            const transformedData = response.data.map((item) => {
+              return this.flattenObject(item);
+            });
+
+            this.rowData = transformedData;
+
+            if (transformedData.length > 0) {
+              // Create columns based on the first item
+              this.columnDefs = Object.keys(transformedData[0]).map((key) =>
+                this.getColumnDef(key, transformedData[0][key])
+              );
+
+              // Update grid
+              if (this.gridApi) {
+                this.gridApi.setGridOption('columnDefs', this.columnDefs);
+                this.gridApi.setGridOption('rowData', transformedData);
+              }
+            }
 
             this.totalRecords = response?.pagination?.totalRecords || 0;
 
             this.canGoPrevious = this.currentPage > 1;
             this.canGoNext = this.rowData.length === this.pageSize;
 
-            if (this.rowData.length > 0) {
-              const flattenedFirstRow = this.flattenObject(this.rowData[0]);
-              this.columnDefs = Object.entries(flattenedFirstRow).map(
-                ([key, value]) => this.getColumnDef(key, value)
-              );
-
-              if (this.selectedSubType === 'issues') {
-                this.columnDefs.unshift({
-                  headerName: 'Actions',
-                  field: 'actions',
-                  filter: false,
-                  sortable: false,
-                  width: 120,
-                  cellRenderer: (params: any) => {
-                    const owner = this.selectedRepo?.owner?.login || '';
-                    const repo = this.selectedRepo?.name || '';
-                    const baseUrl = window.location.origin;
-                    return `<a href="${baseUrl}/find-user?owner=${encodeURIComponent(
-                      owner
-                    )}&repo=${encodeURIComponent(repo)}&issueNumber=${
-                      params.data.issueNumber
-                    }" 
-                            target="_blank" 
-                            style="color: #1976d2; text-decoration: underline;">
-                            Find User
-                         </a>`;
-                  },
-                });
-              }
-
-              if (this.gridApi) {
-                this.gridApi.setGridOption('columnDefs', this.columnDefs);
-
-                const flattenedData = this.rowData.map((item) =>
-                  this.flattenObject(item)
-                );
-                this.gridApi.setGridOption('rowData', flattenedData);
-                this.gridApi.setGridOption(
-                  'paginationPageSize',
-                  Number(this.pageSize)
-                );
-
-                if (this.searchText) {
-                  this.gridApi.setQuickFilter(this.searchText);
-                }
-
-                this.gridApi.hideOverlay();
-              }
-            }
-
             this.isLoading = false;
           } catch (error) {
-            console.error('Error processing response:', error);
+            console.error('Error processing data:', error);
             this.error = {
               title: 'Error Processing Data',
               message: 'Failed to process data. Please try again.',
@@ -603,310 +569,9 @@ export class OrganizationsComponent implements OnInit {
       headerName: this.formatColumnHeader(key),
       sortable: true,
       filter: true,
-      floatingFilter: true,
       resizable: true,
+      flex: 1,
       minWidth: 120,
-      autoHeight: true,
-      wrapText: true,
-      cellStyle: { 'white-space': 'normal' },
-    };
-
-    // GitHub-specific column configurations
-    const githubColumns: { [key: string]: ColDef } = {
-      name: {
-        ...baseConfig,
-        headerName: 'Repository',
-        minWidth: 250,
-        cellRenderer: (params: any) => {
-          const repo = params.data;
-          const visibility =
-            repo.visibility || (repo.private ? 'private' : 'public');
-          const visibilityIcon = visibility === 'private' ? 'lock' : 'public';
-          const visibilityColor =
-            visibility === 'private' ? '#cb2431' : '#28a745';
-          const archived = repo.archived
-            ? '<span class="material-icons" style="font-size: 14px; color: #666;" title="Archived">archive</span>'
-            : '';
-          const fork = repo.fork
-            ? '<span class="material-icons" style="font-size: 14px; color: #666;" title="Fork">fork_right</span>'
-            : '';
-
-          return `
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <div style="display: flex; flex-direction: column; gap: 4px;">
-                <div style="display: flex; align-items: center; gap: 8px;">
-                  <span class="material-icons" style="font-size: 16px; color: #57606a;">code</span>
-                  <a href="${
-                    repo.html_url
-                  }" target="_blank" style="font-weight: 500; color: #0969da;">
-                    ${params.value}
-                  </a>
-                  <span class="material-icons" style="font-size: 14px; color: ${visibilityColor};" title="${visibility}">
-                    ${visibilityIcon}
-                  </span>
-                  ${archived}
-                  ${fork}
-                </div>
-                ${
-                  repo.description
-                    ? `<div style="color: #57606a; font-size: 12px; margin-left: 24px;">
-                    ${repo.description}
-                  </div>`
-                    : ''
-                }
-              </div>
-            </div>
-          `;
-        },
-      },
-      'owner.login': {
-        ...baseConfig,
-        headerName: 'Owner',
-        width: 200,
-        cellRenderer: (params: any) => {
-          const owner = params.data.owner;
-          if (!owner) return '';
-
-          return `
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <div style="
-                width: 24px; 
-                height: 24px; 
-                border-radius: 50%;
-                overflow: hidden;
-                flex-shrink: 0;
-              ">
-                <img 
-                  src="${owner.avatar_url}" 
-                  style="width: 100%; height: 100%; object-fit: cover;"
-                  alt="${owner.login}"
-                  onerror="this.src='assets/default-avatar.png';"
-                >
-              </div>
-              <div style="
-                display: flex;
-                flex-direction: column;
-                min-width: 0;
-              ">
-                <a 
-                  href="${owner.html_url}" 
-                  target="_blank" 
-                  style="
-                    color: #0969da;
-                    text-decoration: none;
-                    overflow: hidden;
-                    text-overflow: ellipsis;
-                    white-space: nowrap;
-                  "
-                  title="${owner.login}"
-                >
-                  ${owner.login}
-                </a>
-                <span style="
-                  color: #57606a;
-                  font-size: 12px;
-                  overflow: hidden;
-                  text-overflow: ellipsis;
-                  white-space: nowrap;
-                ">
-                  ${owner.type}
-                </span>
-              </div>
-            </div>
-          `;
-        },
-        autoHeight: true,
-        cellStyle: {
-          display: 'flex',
-          alignItems: 'center',
-          padding: '8px 15px',
-        },
-      },
-      language: {
-        ...baseConfig,
-        width: 130,
-        cellRenderer: (params: any) => {
-          if (!params.value) return '<span style="color: #666;">-</span>';
-
-          // Language colors (you can add more)
-          const colors: { [key: string]: string } = {
-            JavaScript: '#f1e05a',
-            TypeScript: '#3178c6',
-            Python: '#3572A5',
-            Java: '#b07219',
-            'C#': '#178600',
-            PHP: '#4F5D95',
-            Ruby: '#701516',
-            Go: '#00ADD8',
-            Rust: '#dea584',
-            HTML: '#e34c26',
-            CSS: '#563d7c',
-          };
-
-          const color = colors[params.value] || '#666';
-
-          return `
-            <div style="display: flex; align-items: center; gap: 6px;">
-              <span style="
-                width: 12px;
-                height: 12px;
-                border-radius: 50%;
-                background-color: ${color};
-              "></span>
-              ${params.value}
-            </div>
-          `;
-        },
-      },
-      topics: {
-        ...baseConfig,
-        headerName: 'Topics',
-        minWidth: 200,
-        cellRenderer: (params: any) => {
-          return (
-            params.value
-              ?.map(
-                (topic: string) => `
-                <span style="
-                  background-color: #ddf4ff;
-                  color: #0969da;
-                  padding: 2px 8px;
-                  border-radius: 12px;
-                  font-size: 12px;
-                  margin: 2px 4px 2px 0;
-                  display: inline-block;
-                ">${topic}</span>
-              `
-              )
-              .join('') || ''
-          );
-        },
-      },
-      stargazers_count: {
-        ...baseConfig,
-        headerName: 'Stars',
-        width: 100,
-        cellRenderer: (params: any) => {
-          return `
-            <div style="display: flex; align-items: center; gap: 4px;" title="Stars">
-              <span class="material-icons" style="font-size: 14px; color: #666;">star</span>
-              ${params.value.toLocaleString()}
-            </div>
-          `;
-        },
-      },
-      forks_count: {
-        ...baseConfig,
-        headerName: 'Forks',
-        width: 100,
-        cellRenderer: (params: any) => {
-          return `
-            <div style="display: flex; align-items: center; gap: 4px;" title="Forks">
-              <span class="material-icons" style="font-size: 14px; color: #666;">fork_right</span>
-              ${params.value.toLocaleString()}
-            </div>
-          `;
-        },
-      },
-      updated_at: {
-        ...baseConfig,
-        headerName: 'Last Updated',
-        width: 150,
-        valueFormatter: (params: any) => {
-          if (!params.value) return '';
-          const date = new Date(params.value);
-          const now = new Date();
-          const diff = now.getTime() - date.getTime();
-          const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-
-          if (days === 0) return 'today';
-          if (days === 1) return 'yesterday';
-          if (days < 30) return `${days} days ago`;
-          if (days < 365) return `${Math.floor(days / 30)} months ago`;
-          return `${Math.floor(days / 365)} years ago`;
-        },
-      },
-      visibility: {
-        ...baseConfig,
-        width: 120,
-        cellRenderer: (params: any) => {
-          const colors = {
-            public: '#28a745',
-            private: '#cb2431',
-          };
-          const color = colors[params.value as keyof typeof colors] || '#666';
-          return `
-            <span style="
-              color: ${color};
-              display: flex;
-              align-items: center;
-              gap: 4px;
-            ">
-              <span class="material-icons" style="font-size: 14px;">
-                ${params.value === 'private' ? 'lock' : 'public'}
-              </span>
-              ${params.value}
-            </span>
-          `;
-        },
-      },
-      description: {
-        ...baseConfig,
-        minWidth: 300,
-        flex: 1,
-        cellRenderer: (params: any) => {
-          return (
-            params.value || '<span style="color: #666;">No description</span>'
-          );
-        },
-      },
-      size: {
-        ...baseConfig,
-        headerName: 'Size',
-        width: 120,
-        valueFormatter: (params: any) => {
-          return this.formatFileSize(params.value);
-        },
-      },
-      open_issues_count: {
-        ...baseConfig,
-        headerName: 'Open Issues',
-        width: 120,
-        cellRenderer: (params: any) => {
-          return `
-            <div style="display: flex; align-items: center; gap: 4px;">
-              <span class="material-icons" style="font-size: 14px; color: #666;">error_outline</span>
-              ${params.value.toLocaleString()}
-            </div>
-          `;
-        },
-      },
-      'security.advanced_security': {
-        ...baseConfig,
-        headerName: 'Security',
-        width: 120,
-        cellRenderer: (params: any) => {
-          const status = params.value === 'enabled';
-          return `
-            <div style="display: flex; align-items: center; gap: 4px;">
-              <span class="material-icons" style="font-size: 14px; color: ${
-                status ? '#28a745' : '#cb2431'
-              }">
-                ${status ? 'security' : 'security_off'}
-              </span>
-              ${status ? 'Enabled' : 'Disabled'}
-            </div>
-          `;
-        },
-      },
-      created_at: {
-        ...baseConfig,
-        headerName: 'Created',
-        width: 160,
-        valueFormatter: (params: any) => {
-          return params.value ? new Date(params.value).toLocaleString() : '';
-        },
-      },
     };
 
     // Special column configurations
@@ -914,156 +579,80 @@ export class OrganizationsComponent implements OnInit {
       number: {
         ...baseConfig,
         width: 100,
-        minWidth: 80,
+        flex: 0,
         cellRenderer: (params: any) => {
-          return `#${params.value}`;
+          return params.value
+            ? `<a href="${params.data.html_url}" target="_blank">#${params.value}</a>`
+            : '';
+        },
+      },
+      title: {
+        ...baseConfig,
+        flex: 2,
+        cellRenderer: (params: any) => {
+          const labels = params.data.labels || [];
+          const labelHtml = labels
+            .map(
+              (label: any) =>
+                `<span class="badge" style="background-color: #${label.color}; margin-left: 8px;">${label.name}</span>`
+            )
+            .join('');
+          return `<div>${params.value}${labelHtml}</div>`;
         },
       },
       state: {
         ...baseConfig,
         width: 120,
         cellRenderer: (params: any) => {
-          const color = params.value === 'open' ? '#28a745' : '#cb2431';
-          return `<span style="color: ${color}; font-weight: 500;">${params.value}</span>`;
+          return `<span class="badge badge-${params.value?.toLowerCase()}">${
+            params.value
+          }</span>`;
         },
       },
-      title: {
+      user_login: {
         ...baseConfig,
-        minWidth: 300,
+        headerName: 'Author',
         cellRenderer: (params: any) => {
-          const issue = params.data;
+          const avatarUrl = params.data.user_avatar;
           return `
             <div style="display: flex; align-items: center; gap: 8px;">
-              <span>${params.value}</span>
               ${
-                issue.labels
-                  ?.map(
-                    (label: any) => `
-                <span style="
-                  background-color: #${label.color};
-                  color: ${this.getContrastColor(label.color)};
-                  padding: 2px 6px;
-                  border-radius: 12px;
-                  font-size: 12px;
-                ">${label.name}</span>
-              `
-                  )
-                  .join('') || ''
+                avatarUrl
+                  ? `<img src="${avatarUrl}" style="width: 24px; height: 24px; border-radius: 50%;">`
+                  : ''
               }
+              <span>${params.value || ''}</span>
             </div>
           `;
         },
       },
-      'user.login': {
+      created_at: {
         ...baseConfig,
-        headerName: 'Author',
-        width: 150,
-        cellRenderer: (params: any) => {
-          const user = params.data.user;
-          return user
-            ? `
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <img src="${user.avatarUrl}" style="width: 20px; height: 20px; border-radius: 50%;">
-              <span>${user.login}</span>
-            </div>
-          `
-            : '';
+        valueFormatter: (params) => {
+          return params.value ? new Date(params.value).toLocaleString() : '';
         },
       },
-      assignees: {
+      updated_at: {
         ...baseConfig,
-        width: 200,
-        cellRenderer: (params: any) => {
-          return (
-            params.value
-              ?.map(
-                (assignee: any) => `
-            <img src="${assignee.avatarUrl}" 
-                 title="${assignee.login}"
-                 style="width: 20px; height: 20px; border-radius: 50%; margin-right: 4px;">
-          `
-              )
-              .join('') || ''
-          );
+        valueFormatter: (params) => {
+          return params.value ? new Date(params.value).toLocaleString() : '';
         },
       },
-      comments: {
+      closed_at: {
         ...baseConfig,
-        width: 120,
-        cellRenderer: (params: any) => {
-          return params.value
-            ? `
-            <div style="display: flex; align-items: center; gap: 4px;">
-              <span class="material-icons" style="font-size: 16px;">comment</span>
-              <span>${params.value}</span>
-            </div>
-          `
-            : '';
+        valueFormatter: (params) => {
+          return params.value ? new Date(params.value).toLocaleString() : '';
         },
       },
     };
 
-    // Return special column config if exists
     if (specialColumns[key]) {
       return specialColumns[key];
     }
 
-    // Handle dates
-    if (
-      key.toLowerCase().includes('date') ||
-      key.toLowerCase().includes('at') ||
-      key === 'commit.author.date'
-    ) {
-      return {
-        ...baseConfig,
-        filter: 'agDateColumnFilter',
-        filterParams: {
-          filterOptions: ['inRange'],
-          inRangeInclusive: true,
-          comparator: (filterDate: Date, cellValue: string) => {
-            if (!cellValue) return -1;
-            const cellDate = new Date(cellValue);
-            const filterDateTime = filterDate.getTime();
-            const cellDateTime = cellDate.getTime();
-            if (cellDateTime === filterDateTime) return 0;
-            return cellDateTime > filterDateTime ? 1 : -1;
-          },
-        },
-        valueFormatter: (params) => {
-          if (!params.value) return '';
-          return new Date(params.value).toLocaleString();
-        },
-      };
-    }
-
-    // Return GitHub-specific column config if exists
-    if (githubColumns[key]) {
-      return githubColumns[key];
-    }
-
-    // Default column config based on value type
-    return this.getDefaultColumnConfig(baseConfig, value);
+    return baseConfig;
   }
 
-  // Helper method to get contrast color for labels
-  private getContrastColor(hexcolor: string): string {
-    const r = parseInt(hexcolor.slice(0, 2), 16);
-    const g = parseInt(hexcolor.slice(2, 4), 16);
-    const b = parseInt(hexcolor.slice(4, 6), 16);
-    const yiq = (r * 299 + g * 587 + b * 114) / 1000;
-    return yiq >= 128 ? '#000' : '#fff';
-  }
-
-  getDataTypeOptions(): DataTypeOption[] {
-    if (this.repoSource === 'user') {
-      return this.dataTypeOptions.filter(
-        (option) => option.value !== 'members'
-      );
-    }
-    return this.dataTypeOptions;
-  }
-
-  // Add this helper function to flatten nested objects
   private flattenObject(obj: any, prefix = ''): { [key: string]: any } {
     const flattened: { [key: string]: any } = {};
 
@@ -1084,6 +673,15 @@ export class OrganizationsComponent implements OnInit {
     });
 
     return flattened;
+  }
+
+  getDataTypeOptions(): DataTypeOption[] {
+    if (this.repoSource === 'user') {
+      return this.dataTypeOptions.filter(
+        (option) => option.value !== 'members'
+      );
+    }
+    return this.dataTypeOptions;
   }
 
   private getDefaultColumnConfig(baseConfig: ColDef, value: any): ColDef {

@@ -785,3 +785,45 @@ exports.getUserRepoData = async (req, res) => {
     });
   }
 };
+
+exports.getStoredRepos = async (req, res) => {
+  try {
+    const user = req.user || req.session?.user;
+
+    if (!user) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    const integration = await GitHubIntegration.findOne({
+      githubId: user.githubId,
+    });
+
+    if (!integration) {
+      return res.status(404).json({ error: "GitHub integration not found" });
+    }
+
+    // Fetch repositories from MongoDB
+    const repositories = await GithubRepository.find({
+      githubIntegrationId: integration._id,
+    })
+      .select({
+        id: 1,
+        name: 1,
+        full_name: 1,
+        owner: 1,
+        repoId: 1,
+        description: 1,
+        html_url: 1,
+        updated_at: 1,
+      })
+      .sort({ updated_at: -1 });
+
+    res.json(repositories);
+  } catch (error) {
+    console.error("Error fetching stored repos:", error);
+    res.status(500).json({
+      error: "Failed to fetch repositories",
+      details: error.message,
+    });
+  }
+};

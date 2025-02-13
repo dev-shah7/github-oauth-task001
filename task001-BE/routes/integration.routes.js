@@ -21,5 +21,6 @@ router.get(
   "/repository/relationships",
   relationshipsController.getRepositoryRelationships
 );
+router.get("/github/repos", integrationController.getStoredRepos);
 
 module.exports = router;

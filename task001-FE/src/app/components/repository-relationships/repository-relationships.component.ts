@@ -57,6 +57,21 @@ interface FilterState {
   type: string[];
 }
 
+interface Repository {
+  _id: string;
+  repoId: number;
+  name: string;
+  full_name?: string;
+  owner: {
+    login: string;
+    id: number;
+    avatarUrl: string;
+  };
+  description: string | null;
+  html_url?: string;
+  updated_at?: string;
+}
+
 @Component({
   selector: 'detail-cell',
   template: `
@@ -374,10 +389,19 @@ export class RepositoryRelationshipsComponent implements OnInit {
   isLoading = false;
   error: { title: string; message: string } | null = null;
 
+  // Add new properties
+  repositories: Repository[] = [];
+  selectedRepo: Repository | null = null;
+  isLoadingRepos = false;
+
+  // Add property for filtered repositories
+  filteredRepositories: Repository[] = [];
+  searchRepoText: string = '';
+
   constructor(private http: HttpClient, private snackBar: MatSnackBar) {}
 
   ngOnInit() {
-    this.loadRelationships();
+    this.loadRepositories();
   }
 
   onGridReady(params: any) {
@@ -393,15 +417,19 @@ export class RepositoryRelationshipsComponent implements OnInit {
   }
 
   loadRelationships() {
+    if (!this.selectedRepo) {
+      this.snackBar.open('Please select a repository first', 'Close', {
+        duration: 3000,
+      });
+      return;
+    }
+
     this.isLoading = true;
     this.error = null;
 
-    const owner = 'dev-shahh';
-    const repo = 'analytics';
-
     const queryParams = new URLSearchParams({
-      owner,
-      repo,
+      owner: this.selectedRepo.owner.login,
+      repo: this.selectedRepo.name,
       page: '1',
       pageSize: '100',
     });
@@ -542,5 +570,85 @@ export class RepositoryRelationshipsComponent implements OnInit {
       type: [],
     };
     this.loadRelationships();
+  }
+
+  // Add method to load repositories
+  loadRepositories() {
+    this.isLoadingRepos = true;
+    this.error = null;
+
+    this.http
+      .get<Repository[]>(`${environment.apiUrl}/integrations/github/repos`, {
+        withCredentials: true,
+      })
+      .pipe(
+        catchError((error) => {
+          console.error('Error loading repositories:', error);
+          this.error = {
+            title: 'Error Loading Repositories',
+            message:
+              error.error?.message ||
+              'Failed to load repositories. Please try again.',
+          };
+          this.isLoadingRepos = false;
+          return throwError(() => error);
+        }),
+        finalize(() => {
+          this.isLoadingRepos = false;
+        })
+      )
+      .subscribe({
+        next: (repos) => {
+          this.repositories = repos.map((repo) => ({
+            ...repo,
+            full_name: `${repo.owner.login}/${repo.name}`,
+            owner: {
+              ...repo.owner,
+              avatar_url: repo.owner.avatarUrl,
+            },
+          }));
+          this.filteredRepositories = this.repositories; // Initialize filtered list
+
+          if (repos.length === 0) {
+            this.error = {
+              title: 'No Repositories Found',
+              message:
+                'No repositories were found. Please ensure you have access to repositories.',
+            };
+          }
+        },
+      });
+  }
+
+  // Add method to handle repository selection
+  onRepoChange() {
+    if (this.selectedRepo) {
+      // Use repoId instead of name
+      this.loadRelationships();
+    }
+  }
+
+  // Add method to handle retry
+  retryLoadRepositories() {
+    this.error = null;
+    this.loadRepositories();
+  }
+
+  // Add method to filter repositories
+  filterRepositories(searchText: string) {
+    this.searchRepoText = searchText;
+    if (!searchText) {
+      this.filteredRepositories = this.repositories;
+      return;
+    }
+
+    searchText = searchText.toLowerCase();
+    this.filteredRepositories = this.repositories.filter(
+      (repo) =>
+        repo.name.toLowerCase().includes(searchText) ||
+        repo.owner.login.toLowerCase().includes(searchText) ||
+        (repo.description &&
+          repo.description.toLowerCase().includes(searchText))
+    );
   }
 }
