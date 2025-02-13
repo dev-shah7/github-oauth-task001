@@ -157,12 +157,71 @@ async function syncRepositoryData(integration, repository, orgId = null) {
   };
 
   try {
-    // Fetch commits
+    // Fetch commits with updated structure
     const commitsEndpoint = `https://api.github.com/repos/${repository.owner.login}/${repository.name}/commits`;
     try {
       const commitsData = await fetchAllPages(commitsEndpoint, headers);
-      await handleCommits(commitsData, integration, repository.repoId, orgId);
-      stats.commits = commitsData.length;
+
+      // Transform commit data to match the new model
+      const transformedCommits = commitsData.map((commit) => ({
+        repoId: repository.repoId,
+        sha: commit.sha,
+        url: commit.url,
+        html_url: commit.html_url,
+        commit: {
+          author: {
+            name: commit.commit.author.name,
+            email: commit.commit.author.email,
+            date: commit.commit.author.date,
+          },
+          committer: {
+            name: commit.commit.committer.name,
+            email: commit.commit.committer.email,
+            date: commit.commit.committer.date,
+          },
+          message: commit.commit.message,
+          comment_count: commit.commit.comment_count,
+          verification: {
+            verified: commit.commit.verification?.verified || false,
+            reason: commit.commit.verification?.reason,
+            signature: commit.commit.verification?.signature,
+            payload: commit.commit.verification?.payload,
+          },
+        },
+        author: commit.author && {
+          login: commit.author.login,
+          id: commit.author.id,
+          avatar_url: commit.author.avatar_url,
+          url: commit.author.url,
+          html_url: commit.author.html_url,
+        },
+        committer: commit.committer && {
+          login: commit.committer.login,
+          id: commit.committer.id,
+          avatar_url: commit.committer.avatar_url,
+          url: commit.committer.url,
+          html_url: commit.committer.html_url,
+        },
+        parents: commit.parents.map((parent) => ({
+          sha: parent.sha,
+          url: parent.url,
+        })),
+        githubIntegrationId: integration._id,
+        ...(orgId && { orgId }),
+        pageInfo: {
+          page: commit._page,
+          pageSize: commit._pageSize,
+          fetchedAt: new Date(),
+        },
+      }));
+
+      await handleCommits(
+        transformedCommits,
+        integration,
+        repository.repoId,
+        orgId
+      );
+      stats.commits = transformedCommits.length;
     } catch (error) {
       if (
         error.response?.status === 409 &&
