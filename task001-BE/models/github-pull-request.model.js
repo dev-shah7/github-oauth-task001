@@ -27,6 +27,8 @@ const githubPullRequestSchema = new mongoose.Schema(
       login: String,
       id: Number,
       avatarUrl: String,
+      url: String,
+      htmlUrl: String,
     },
     body: String,
     createdAt: {
@@ -43,6 +45,31 @@ const githubPullRequestSchema = new mongoose.Schema(
       ref: "GitHubIntegration",
       index: true,
     },
+    mergedBy: {
+      login: String,
+      id: Number,
+      avatarUrl: String,
+      url: String,
+      htmlUrl: String,
+    },
+    assignees: [
+      {
+        login: String,
+        id: Number,
+        avatarUrl: String,
+        url: String,
+        htmlUrl: String,
+      },
+    ],
+    requestedReviewers: [
+      {
+        login: String,
+        id: Number,
+        avatarUrl: String,
+        url: String,
+        htmlUrl: String,
+      },
+    ],
   },
   {
     timestamps: true,

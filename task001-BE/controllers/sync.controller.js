@@ -116,11 +116,7 @@ async function syncRepositories(integration, org = null) {
         repoId: repo.id,
         name: repo.name,
         fullName: repo.full_name,
-        owner: {
-          login: repo.owner.login,
-          id: repo.owner.id,
-          avatarUrl: repo.owner.avatar_url,
-        },
+        owner: normalizeUserData(repo.owner),
         private: repo.private,
         description: repo.description,
         url: repo.url,
@@ -140,6 +136,17 @@ async function syncRepositories(integration, org = null) {
   );
 
   return repositories;
+}
+
+function normalizeUserData(user) {
+  if (!user) return null;
+  return {
+    login: user.login,
+    id: user.id,
+    avatarUrl: user.avatar_url,
+    url: user.url,
+    htmlUrl: user.html_url,
+  };
 }
 
 async function syncRepositoryData(integration, repository, orgId = null) {
@@ -181,27 +188,15 @@ async function syncRepositoryData(integration, repository, orgId = null) {
           },
           message: commit.commit.message,
           comment_count: commit.commit.comment_count,
-          verification: {
-            verified: commit.commit.verification?.verified || false,
-            reason: commit.commit.verification?.reason,
-            signature: commit.commit.verification?.signature,
-            payload: commit.commit.verification?.payload,
+          verification: commit.commit.verification || {
+            verified: false,
+            reason: null,
+            signature: null,
+            payload: null,
           },
         },
-        author: commit.author && {
-          login: commit.author.login,
-          id: commit.author.id,
-          avatar_url: commit.author.avatar_url,
-          url: commit.author.url,
-          html_url: commit.author.html_url,
-        },
-        committer: commit.committer && {
-          login: commit.committer.login,
-          id: commit.committer.id,
-          avatar_url: commit.committer.avatar_url,
-          url: commit.committer.url,
-          html_url: commit.committer.html_url,
-        },
+        author: normalizeUserData(commit.author),
+        committer: normalizeUserData(commit.committer),
         parents: commit.parents.map((parent) => ({
           sha: parent.sha,
           url: parent.url,
