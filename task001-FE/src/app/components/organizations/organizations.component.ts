@@ -169,15 +169,9 @@ export class OrganizationsComponent implements OnInit {
     paginationPageSizeSelector: this.paginationPageSizeSelector,
     cacheBlockSize: this.paginationPageSize,
     domLayout: 'autoHeight',
-    suppressPaginationPanel: true, // Hide the default pagination panel
+    suppressPaginationPanel: true,
     onGridReady: (params) => {
       this.gridApi = params.api;
-      // Wait for next tick to ensure grid is properly initialized
-      setTimeout(() => {
-        if (this.rowData.length > 0) {
-          this.updateGrid(this.rowData);
-        }
-      });
     },
   };
 
@@ -348,26 +342,23 @@ export class OrganizationsComponent implements OnInit {
     }
 
     try {
-      // Flatten the first row to get all possible columns including nested ones
-      if (data.length > 0) {
-        const flattenedData = data.map((item) => this.flattenObject(item));
-        const firstRow = flattenedData[0];
+      // Flatten the data
+      const flattenedData = data.map((item) => this.flattenObject(item));
 
-        // Create column definitions from flattened data
-        const columns = Object.entries(firstRow).map(([key, value]) =>
+      // Update or create column definitions if needed
+      if (this.columnDefs.length === 0 && flattenedData.length > 0) {
+        const firstRow = flattenedData[0];
+        this.columnDefs = Object.entries(firstRow).map(([key, value]) =>
           this.getColumnDef(key, value)
         );
-
-        this.columnDefs = columns;
-        this.gridApi.setGridOption('columnDefs', columns);
-
-        // Update row data with flattened data
-        this.gridApi.setGridOption('rowData', flattenedData);
-      } else {
-        this.gridApi.setGridOption('rowData', []);
+        // Use setGridOption for column definitions
+        this.gridApi.setGridOption('columnDefs', this.columnDefs);
       }
 
-      // Update pagination settings
+      // Use setGridOption for row data
+      this.gridApi.setGridOption('rowData', flattenedData);
+
+      // Use setGridOption for pagination page size
       this.gridApi.setGridOption('paginationPageSize', Number(this.pageSize));
 
       // Apply quick filter if there's search text
@@ -380,16 +371,18 @@ export class OrganizationsComponent implements OnInit {
     }
   }
 
-  // Update loadRepoData to use the new updateGrid method
+  // Update loadRepoData method with correct grid API calls
   loadRepoData() {
     if (!this.selectedRepo || !this.selectedSubType || this.isLoading) return;
 
     this.isLoading = true;
     this.error = null;
+    this.columnDefs = [];
 
-    if (this.gridApi) {
-      this.gridApi.showLoadingOverlay();
-    }
+    const endpoint =
+      this.repoSource === 'user'
+        ? `${environment.apiUrl}/integrations/github/user/repo/${this.selectedSubType}`
+        : `${environment.apiUrl}/integrations/github/organizations/${this.selectedOrg}/repo/${this.selectedSubType}`;
 
     const payload = {
       owner: this.selectedRepo.owner.login,
@@ -398,18 +391,19 @@ export class OrganizationsComponent implements OnInit {
       pageSize: this.pageSize,
     };
 
-    console.log('Loading repo data with payload:', payload);
+    // Show loading overlay if grid is ready
+    if (this.gridApi) {
+      this.gridApi.showLoadingOverlay();
+    }
 
     this.http
-      .post<PaginatedResponse<any>>(
-        `${environment.apiUrl}/integrations/github/organizations/${this.selectedOrg}/repo/${this.selectedSubType}`,
-        payload,
-        { withCredentials: true }
-      )
+      .post<PaginatedResponse<any>>(endpoint, payload, {
+        withCredentials: true,
+      })
       .subscribe({
         next: (response) => {
           try {
-            // Update data
+            // Store the raw data
             this.rowData = response.data;
             this.totalRecords = response?.pagination?.totalRecords || 0;
 
@@ -417,14 +411,47 @@ export class OrganizationsComponent implements OnInit {
             this.canGoPrevious = this.currentPage > 1;
             this.canGoNext = this.rowData.length === this.pageSize;
 
-            // Update the grid with new data
-            this.updateGrid(this.rowData);
+            // Wait for grid API to be available
+            const updateGrid = () => {
+              if (this.gridApi) {
+                // Force regenerate column definitions
+                if (this.rowData.length > 0) {
+                  const flattenedFirstRow = this.flattenObject(this.rowData[0]);
+                  this.columnDefs = Object.entries(flattenedFirstRow).map(
+                    ([key, value]) => this.getColumnDef(key, value)
+                  );
+                  this.gridApi.setGridOption('columnDefs', this.columnDefs);
+                }
 
-            // Clear loading states
+                // Update the grid with new data
+                const flattenedData = this.rowData.map((item) =>
+                  this.flattenObject(item)
+                );
+                this.gridApi.setGridOption('rowData', flattenedData);
+
+                // Update pagination settings
+                this.gridApi.setGridOption(
+                  'paginationPageSize',
+                  Number(this.pageSize)
+                );
+
+                // Apply quick filter if there's search text
+                if (this.searchText) {
+                  this.gridApi.setQuickFilter(this.searchText);
+                }
+
+                // Hide loading overlay
+                this.gridApi.hideOverlay();
+              } else {
+                // Retry after a short delay if grid API is not ready
+                setTimeout(updateGrid, 100);
+              }
+            };
+
+            updateGrid();
+
+            // Clear loading state
             this.isLoading = false;
-            if (this.gridApi) {
-              this.gridApi.hideOverlay();
-            }
           } catch (error) {
             console.error('Error processing response:', error);
             this.error = 'Error processing data';
@@ -443,13 +470,6 @@ export class OrganizationsComponent implements OnInit {
           }
         },
       });
-  }
-
-  getRepoDataTypes() {
-    return (
-      this.dataTypeOptions.find((opt) => opt.value === 'repo-data')?.subTypes ||
-      []
-    );
   }
 
   // Update search methods
@@ -486,6 +506,69 @@ export class OrganizationsComponent implements OnInit {
       wrapText: true,
       cellStyle: { 'white-space': 'normal' },
     };
+
+    // Special column configurations for commits
+    const commitColumns: { [key: string]: ColDef } = {
+      sha: {
+        ...baseConfig,
+        width: 100,
+        cellRenderer: (params: any) => {
+          return `<a href="${
+            params.data.html_url
+          }" target="_blank">${params.value.substring(0, 7)}</a>`;
+        },
+      },
+      'commit.message': {
+        ...baseConfig,
+        headerName: 'Message',
+        minWidth: 300,
+      },
+      'commit.author.name': {
+        ...baseConfig,
+        headerName: 'Author',
+        width: 150,
+      },
+      'commit.author.date': {
+        ...baseConfig,
+        headerName: 'Date',
+        width: 160,
+        valueFormatter: (params: any) => {
+          return params.value ? new Date(params.value).toLocaleString() : '';
+        },
+      },
+      'author.login': {
+        ...baseConfig,
+        headerName: 'GitHub User',
+        width: 150,
+        cellRenderer: (params: any) => {
+          const author = params.data.author;
+          return author
+            ? `
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <img src="${author.avatar_url}" style="width: 20px; height: 20px; border-radius: 50%;">
+              <a href="${author.html_url}" target="_blank">${author.login}</a>
+            </div>
+          `
+            : '';
+        },
+      },
+      'commit.verification.verified': {
+        ...baseConfig,
+        headerName: 'Verified',
+        width: 100,
+        cellRenderer: (params: any) => {
+          const verified = params.value;
+          return verified
+            ? '<span style="color: #28a745;">✓ Verified</span>'
+            : '<span style="color: #cb2431;">✗ Unverified</span>';
+        },
+      },
+    };
+
+    // Return commit-specific column config if exists
+    if (commitColumns[key]) {
+      return commitColumns[key];
+    }
 
     // Special column configurations
     const specialColumns: { [key: string]: ColDef } = {
@@ -623,21 +706,26 @@ export class OrganizationsComponent implements OnInit {
   private flattenObject(obj: any, prefix = ''): { [key: string]: any } {
     const flattened: { [key: string]: any } = {};
 
+    const processValue = (value: any, key: string) => {
+      const newKey = prefix ? `${prefix}.${key}` : key;
+
+      if (value && typeof value === 'object') {
+        if (Array.isArray(value)) {
+          // Keep arrays as is
+          flattened[newKey] = value;
+        } else if (value instanceof Date) {
+          flattened[newKey] = value;
+        } else {
+          Object.assign(flattened, this.flattenObject(value, newKey));
+        }
+      } else {
+        flattened[newKey] = value;
+      }
+    };
+
     for (const key in obj) {
       if (obj.hasOwnProperty(key)) {
-        const value = obj[key];
-        const newKey = prefix ? `${prefix}_${key}` : key;
-
-        if (
-          value &&
-          typeof value === 'object' &&
-          !Array.isArray(value) &&
-          !(value instanceof Date)
-        ) {
-          Object.assign(flattened, this.flattenObject(value, newKey));
-        } else {
-          flattened[newKey] = value;
-        }
+        processValue(obj[key], key);
       }
     }
 
@@ -677,5 +765,13 @@ export class OrganizationsComponent implements OnInit {
           },
         };
     }
+  }
+
+  // Add back the getRepoDataTypes method
+  getRepoDataTypes() {
+    return (
+      this.dataTypeOptions.find((opt) => opt.value === 'repo-data')?.subTypes ||
+      []
+    );
   }
 }

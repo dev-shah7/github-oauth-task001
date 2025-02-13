@@ -10,6 +10,8 @@ const githubCommitSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  url: String,
+  html_url: String,
   commit: {
     author: {
       name: String,
@@ -23,19 +25,33 @@ const githubCommitSchema = new mongoose.Schema({
     },
     message: String,
     comment_count: Number,
+    verification: {
+      verified: Boolean,
+      reason: String,
+      signature: String,
+      payload: String,
+    },
   },
   author: {
     login: String,
     id: Number,
-    avatarUrl: String,
+    avatar_url: String,
+    url: String,
+    html_url: String,
   },
   committer: {
     login: String,
     id: Number,
-    avatarUrl: String,
+    avatar_url: String,
+    url: String,
+    html_url: String,
   },
-  url: String,
-  htmlUrl: String,
+  parents: [
+    {
+      sha: String,
+      url: String,
+    },
+  ],
   githubIntegrationId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "GitHubIntegration",

@@ -178,10 +178,11 @@ async function fetchAndStoreCommitsPage(
     const commitsEndpoint = `https://api.github.com/repos/${repository.owner.login}/${repository.name}/commits?page=${page}&per_page=${pageSize}`;
     const response = await axios.get(commitsEndpoint, { headers });
 
-    console.log(response.data, "res");
     const commits = response.data.map((commit) => ({
       repoId: repository.repoId,
       sha: commit.sha,
+      url: commit.url,
+      html_url: commit.html_url,
       commit: {
         author: {
           name: commit.commit.author.name,
@@ -195,17 +196,26 @@ async function fetchAndStoreCommitsPage(
         },
         message: commit.commit.message,
         comment_count: commit.commit.comment_count,
+        verification: commit.commit.verification,
       },
       author: commit.author && {
         login: commit.author.login,
         id: commit.author.id,
-        avatarUrl: commit.author.avatar_url,
+        avatar_url: commit.author.avatar_url,
+        url: commit.author.url,
+        html_url: commit.author.html_url,
       },
       committer: commit.committer && {
         login: commit.committer.login,
         id: commit.committer.id,
-        avatarUrl: commit.committer.avatar_url,
+        avatar_url: commit.committer.avatar_url,
+        url: commit.committer.url,
+        html_url: commit.committer.html_url,
       },
+      parents: commit.parents.map((parent) => ({
+        sha: parent.sha,
+        url: parent.url,
+      })),
       githubIntegrationId: integration._id,
       ...(orgId && { orgId }),
       pageInfo: {
