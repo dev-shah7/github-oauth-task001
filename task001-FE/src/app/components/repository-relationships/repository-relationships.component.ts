@@ -794,6 +794,9 @@ export class RepositoryRelationshipsComponent implements OnInit {
   filteredRepositories: Repository[] = [];
   searchRepoText: string = '';
 
+  // Add these properties if they don't exist
+  private originalData: any[] = [];
+
   constructor(
     private http: HttpClient,
     private snackBar: MatSnackBar,
@@ -951,6 +954,7 @@ export class RepositoryRelationshipsComponent implements OnInit {
             );
           }
 
+          this.originalData = transformedData;
           this.combinedData = transformedData;
 
           // Add virtual root nodes for grouping
@@ -998,9 +1002,76 @@ export class RepositoryRelationshipsComponent implements OnInit {
     }
   }
 
-  // Add new methods for filter handling
+  // Update the onDateRangeChange method
   onDateRangeChange() {
-    this.loadRelationships();
+    this.applyFilters();
+  }
+
+  // Update the applyFilters method
+  private applyFilters() {
+    let filteredData = [...this.originalData];
+
+    // Apply date range filter
+    if (this.filters.dateRange.start || this.filters.dateRange.end) {
+      filteredData = filteredData.filter((item) => {
+        // Skip repository and group items
+        if (item.type === 'Repository' || item.type === 'Group') {
+          return true;
+        }
+
+        const itemDate = new Date(item.date);
+        const startDate = this.filters.dateRange.start
+          ? new Date(this.filters.dateRange.start)
+          : null;
+        const endDate = this.filters.dateRange.end
+          ? new Date(this.filters.dateRange.end)
+          : null;
+
+        // Set time to midnight for accurate date comparison
+        if (startDate) startDate.setHours(0, 0, 0, 0);
+        if (endDate) endDate.setHours(23, 59, 59, 999);
+
+        if (startDate && endDate) {
+          return itemDate >= startDate && itemDate <= endDate;
+        } else if (startDate) {
+          return itemDate >= startDate;
+        } else if (endDate) {
+          return itemDate <= endDate;
+        }
+
+        return true;
+      });
+
+      // Re-add the group nodes
+      if (filteredData.length > 1) {
+        const repoName =
+          this.selectedRepo?.full_name || this.repositoryInfo?.fullName;
+        filteredData.push(
+          {
+            type: 'Group',
+            treePath: [repoName, 'Commits'],
+            title: 'Commits',
+          },
+          {
+            type: 'Group',
+            treePath: [repoName, 'Pull Requests'],
+            title: 'Pull Requests',
+          },
+          {
+            type: 'Group',
+            treePath: [repoName, 'Issues'],
+            title: 'Issues',
+          }
+        );
+      }
+    }
+
+    this.combinedData = filteredData;
+
+    // Update the grid data
+    if (this.gridApi) {
+      this.gridApi.setGridOption('rowData', this.combinedData);
+    }
   }
 
   onStatusChange() {
@@ -1011,6 +1082,7 @@ export class RepositoryRelationshipsComponent implements OnInit {
     this.loadRelationships();
   }
 
+  // Update the clearFilters method
   clearFilters() {
     this.filters = {
       dateRange: {
@@ -1020,7 +1092,13 @@ export class RepositoryRelationshipsComponent implements OnInit {
       status: [],
       type: [],
     };
-    this.loadRelationships();
+    this.searchText = '';
+
+    // Reset to original data
+    this.combinedData = [...this.originalData];
+    if (this.gridApi) {
+      this.gridApi.setGridOption('rowData', this.combinedData);
+    }
   }
 
   // Add method to load repositories

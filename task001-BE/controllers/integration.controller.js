@@ -842,89 +842,84 @@ exports.getIssueDetails = async (req, res) => {
     const { owner, repo, issueNumber } = req.params;
     const issueNum = parseInt(issueNumber);
 
-    // Get issue details and comments in parallel
-    const [issueDetails, comments, events] = await Promise.all([
-      octokit.rest.issues.get({
-        owner,
-        repo,
-        issue_number: issueNum,
-      }),
-      octokit.rest.issues.listComments({
-        owner,
-        repo,
-        issue_number: issueNum,
-      }),
-      octokit.rest.issues.listEvents({
-        owner,
-        repo,
-        issue_number: issueNum,
-      }),
-    ]);
+    // Validate user authentication
+    const user = req.user || req.session?.user;
+    if (!user) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
 
-    // Get related items from MongoDB
-    const relatedItems = await Promise.all([
-      // Find related PRs that reference this issue
-      PullRequest.find({
-        $or: [
-          { body: { $regex: `#${issueNum}`, $options: "i" } },
-          { linked_issues: issueNum },
-        ],
-        "repository.full_name": `${owner}/${repo}`,
-      }).select("title html_url state created_at number"),
-
-      // Find related commits that reference this issue
-      Commit.find({
-        $or: [
-          { message: { $regex: `#${issueNum}`, $options: "i" } },
-          { referenced_issues: issueNum },
-        ],
-        "repository.full_name": `${owner}/${repo}`,
-      }).select("message html_url sha created_at"),
-
-      // Find related issues that are linked
-      Issue.find({
-        $or: [
-          { body: { $regex: `#${issueNum}`, $options: "i" } },
-          { referenced_issues: issueNum },
-        ],
-        "repository.full_name": `${owner}/${repo}`,
-        number: { $ne: issueNum },
-      }).select("title html_url state number created_at"),
-    ]);
-
-    // Combine and sort timeline events
-    const timeline = [
-      ...comments.data.map((comment) => ({
-        type: "commented",
-        created_at: comment.created_at,
-        actor: comment.user,
-        description: comment.body,
-        html_url: comment.html_url,
-      })),
-      ...events.data.map((event) => ({
-        type: event.event,
-        created_at: event.created_at,
-        actor: event.actor,
-        description: getEventDescription(event),
-        html_url: event.url,
-      })),
-    ].sort(
-      (a, b) =>
-        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-    );
-
-    res.json({
-      details: issueDetails.data,
-      related: {
-        pullRequests: relatedItems[0],
-        commits: relatedItems[1],
-        issues: relatedItems[2],
-      },
-      timeline,
+    // Get GitHub integration
+    const integration = await GitHubIntegration.findOne({
+      githubId: user.githubId,
     });
+
+    if (!integration) {
+      return res.status(404).json({ error: "GitHub integration not found" });
+    }
+
+    // Create authenticated Octokit instance with user's token
+    const userOctokit = new Octokit({
+      auth: integration.getDecryptedAccessToken(),
+    });
+
+    try {
+      // Get issue details and comments in parallel with timeout
+      const [issueDetails, comments] = await Promise.all([
+        userOctokit.rest.issues
+          .get({
+            owner,
+            repo,
+            issue_number: issueNum,
+            headers: {
+              "If-None-Match": "", // Bypass cache to avoid stale data
+            },
+          })
+          .catch((error) => {
+            if (error.status === 403 && error.message.includes("rate limit")) {
+              throw new Error(
+                "API rate limit exceeded. Please try again later."
+              );
+            }
+            console.error("Error fetching issue:", error);
+            throw new Error("Failed to fetch issue details");
+          }),
+
+        userOctokit.rest.issues
+          .listComments({
+            owner,
+            repo,
+            issue_number: issueNum,
+            per_page: 100,
+            headers: {
+              "If-None-Match": "", // Bypass cache to avoid stale data
+            },
+          })
+          .catch((error) => {
+            console.error("Error fetching comments:", error);
+            return { data: [] }; // Return empty comments if fetch fails
+          }),
+      ]);
+
+      // Format the response
+      const response = {
+        details: issueDetails.data,
+        comments: comments.data,
+      };
+
+      res.json(response);
+    } catch (error) {
+      console.error("Error in GitHub API calls:", error);
+      res.status(error.message.includes("rate limit") ? 429 : 500).json({
+        error: "Failed to fetch issue details",
+        message: error.message,
+      });
+    }
   } catch (error) {
-    console.error("Error fetching issue details:", error);
-    res.status(500).json({ message: "Error fetching issue details" });
+    console.error("Error in getIssueDetails:", error);
+    res.status(500).json({
+      error: "Server error",
+      message: error.message,
+    });
   }
 };
 
@@ -960,83 +955,106 @@ exports.getCommitDetails = async (req, res) => {
   try {
     const { owner, repo, sha } = req.params;
 
-    // Get commit details and comments in parallel
-    const [commitDetails, comments] = await Promise.all([
-      octokit.rest.repos.getCommit({
-        owner,
-        repo,
-        ref: sha,
-      }),
-      octokit.rest.repos.listCommentsForCommit({
-        owner,
-        repo,
-        commit_sha: sha,
-      }),
-    ]);
+    // Validate user authentication
+    const user = req.user || req.session?.user;
+    if (!user) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
 
-    // Get related items from MongoDB
-    const relatedItems = await Promise.all([
-      // Find related PRs that reference this commit
-      PullRequest.find({
-        $or: [
-          { body: { $regex: sha.substring(0, 7), $options: "i" } },
-          { "commits.sha": sha },
-        ],
-        "repository.full_name": `${owner}/${repo}`,
-      }).select("title html_url state created_at number"),
-
-      // Find related issues that reference this commit
-      Issue.find({
-        $or: [
-          { body: { $regex: sha.substring(0, 7), $options: "i" } },
-          { referenced_commits: sha },
-        ],
-        "repository.full_name": `${owner}/${repo}`,
-      }).select("title html_url state number created_at"),
-    ]);
-
-    // Format the response
-    const details = {
-      sha: commitDetails.data.sha,
-      message: commitDetails.data.commit.message,
-      author: {
-        name: commitDetails.data.commit.author.name,
-        email: commitDetails.data.commit.author.email,
-        date: commitDetails.data.commit.author.date,
-      },
-      committer: {
-        name: commitDetails.data.commit.committer.name,
-        email: commitDetails.data.commit.committer.email,
-        date: commitDetails.data.commit.committer.date,
-      },
-      user: commitDetails.data.author || commitDetails.data.committer, // GitHub user info
-      stats: commitDetails.data.stats,
-      files: commitDetails.data.files.map((file) => ({
-        filename: file.filename,
-        status: file.status,
-        additions: file.additions,
-        deletions: file.deletions,
-        changes: file.changes,
-        patch: file.patch,
-      })),
-      html_url: commitDetails.data.html_url,
-      comments: comments.data.map((comment) => ({
-        user: comment.user,
-        body: comment.body,
-        created_at: comment.created_at,
-        html_url: comment.html_url,
-      })),
-    };
-
-    res.json({
-      details,
-      related: {
-        pullRequests: relatedItems[0],
-        issues: relatedItems[1],
-      },
+    // Get GitHub integration
+    const integration = await GitHubIntegration.findOne({
+      githubId: user.githubId,
     });
+
+    if (!integration) {
+      return res.status(404).json({ error: "GitHub integration not found" });
+    }
+
+    // Create authenticated Octokit instance with user's token
+    const userOctokit = new Octokit({
+      auth: integration.getDecryptedAccessToken(),
+    });
+
+    try {
+      // Get commit details and comments in parallel
+      const [commitDetails, comments] = await Promise.all([
+        userOctokit.rest.repos
+          .getCommit({
+            owner,
+            repo,
+            ref: sha,
+            headers: {
+              "If-None-Match": "", // Bypass cache
+            },
+          })
+          .catch((error) => {
+            if (error.status === 403 && error.message.includes("rate limit")) {
+              throw new Error(
+                "API rate limit exceeded. Please try again later."
+              );
+            }
+            throw error;
+          }),
+
+        userOctokit.rest.repos
+          .listCommentsForCommit({
+            owner,
+            repo,
+            commit_sha: sha,
+            per_page: 100,
+            headers: {
+              "If-None-Match": "", // Bypass cache
+            },
+          })
+          .catch((error) => {
+            console.error("Error fetching comments:", error);
+            return { data: [] }; // Return empty comments if fetch fails
+          }),
+      ]);
+
+      // Format the response
+      const response = {
+        details: {
+          sha: commitDetails.data.sha,
+          message: commitDetails.data.commit.message,
+          author: {
+            name: commitDetails.data.commit.author.name,
+            email: commitDetails.data.commit.author.email,
+            date: commitDetails.data.commit.author.date,
+          },
+          committer: {
+            name: commitDetails.data.commit.committer.name,
+            email: commitDetails.data.commit.committer.email,
+            date: commitDetails.data.commit.committer.date,
+          },
+          user: commitDetails.data.author || commitDetails.data.committer,
+          stats: commitDetails.data.stats,
+          files: commitDetails.data.files.map((file) => ({
+            filename: file.filename,
+            status: file.status,
+            additions: file.additions,
+            deletions: file.deletions,
+            changes: file.changes,
+            patch: file.patch,
+          })),
+          html_url: commitDetails.data.html_url,
+        },
+        comments: comments.data,
+      };
+
+      res.json(response);
+    } catch (error) {
+      console.error("Error in GitHub API calls:", error);
+      res.status(error.message.includes("rate limit") ? 429 : 500).json({
+        error: "Failed to fetch commit details",
+        message: error.message,
+      });
+    }
   } catch (error) {
-    console.error("Error fetching commit details:", error);
-    res.status(500).json({ message: "Error fetching commit details" });
+    console.error("Error in getCommitDetails:", error);
+    res.status(500).json({
+      error: "Server error",
+      message: error.message,
+    });
   }
 };
