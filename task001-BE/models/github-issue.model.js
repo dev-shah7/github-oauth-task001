@@ -19,6 +19,8 @@ const githubIssueSchema = new mongoose.Schema({
     login: String,
     id: Number,
     avatarUrl: String,
+    url: String,
+    htmlUrl: String,
   },
   body: String,
   createdAt: {
@@ -40,6 +42,8 @@ const githubIssueSchema = new mongoose.Schema({
       login: String,
       id: Number,
       avatarUrl: String,
+      url: String,
+      htmlUrl: String,
     },
   ],
   milestone: {

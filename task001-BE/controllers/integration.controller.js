@@ -123,25 +123,79 @@ exports.getOrganizationData = async (req, res) => {
         const repositories = await Promise.all(
           response.data.map(async (repo) => {
             const repoData = {
-              orgId: organization.orgId,
-              repoId: repo.id,
+              id: repo.id,
               name: repo.name,
-              fullName: repo.full_name,
+              full_name: repo.full_name,
               owner: {
                 login: repo.owner.login,
                 id: repo.owner.id,
-                avatarUrl: repo.owner.avatar_url,
+                avatar_url: repo.owner.avatar_url,
+                html_url: repo.owner.html_url,
+                type: repo.owner.type,
               },
               private: repo.private,
+              html_url: repo.html_url,
               description: repo.description,
-              url: repo.url,
-              htmlUrl: repo.html_url,
-              createdAt: repo.created_at,
-              updatedAt: repo.updated_at,
+              fork: repo.fork,
+              homepage: repo.homepage,
+              language: repo.language,
+
+              // Repository stats
+              forks_count: repo.forks_count,
+              stargazers_count: repo.stargazers_count,
+              watchers_count: repo.watchers_count,
+              open_issues_count: repo.open_issues_count,
+              size: repo.size,
+
+              // Repository features
+              has_issues: repo.has_issues,
+              has_projects: repo.has_projects,
+              has_wiki: repo.has_wiki,
+              has_pages: repo.has_pages,
+              has_downloads: repo.has_downloads,
+              has_discussions: repo.has_discussions,
+
+              // Repository status
+              archived: repo.archived,
+              disabled: repo.disabled,
+              visibility: repo.visibility,
+              default_branch: repo.default_branch,
+
+              // Topics/Tags
+              topics: repo.topics || [],
+
+              // Timestamps
+              created_at: repo.created_at,
+              updated_at: repo.updated_at,
+              pushed_at: repo.pushed_at,
+
+              // URLs
+              clone_url: repo.clone_url,
+              ssh_url: repo.ssh_url,
+              svn_url: repo.svn_url,
+
+              // Permissions
+              permissions: repo.permissions,
+
+              // Security features
+              security: {
+                advanced_security:
+                  repo.security_and_analysis?.advanced_security?.status ||
+                  "disabled",
+                secret_scanning:
+                  repo.security_and_analysis?.secret_scanning?.status ||
+                  "disabled",
+                secret_scanning_push_protection:
+                  repo.security_and_analysis?.secret_scanning_push_protection
+                    ?.status || "disabled",
+              },
+
+              // Additional metadata
+              orgId: organization.orgId,
               githubIntegrationId: integration._id,
             };
             return await GithubRepository.findOneAndUpdate(
-              { repoId: repoData.repoId },
+              { repoId: repoData.id },
               repoData,
               { upsert: true, new: true }
             );
@@ -520,24 +574,78 @@ exports.getUserRepos = async (req, res) => {
     const repositories = await Promise.all(
       response.data.map(async (repo) => {
         const repoData = {
-          repoId: repo.id,
+          id: repo.id,
           name: repo.name,
-          fullName: repo.full_name,
+          full_name: repo.full_name,
           owner: {
             login: repo.owner.login,
             id: repo.owner.id,
-            avatarUrl: repo.owner.avatar_url,
+            avatar_url: repo.owner.avatar_url,
+            html_url: repo.owner.html_url,
+            type: repo.owner.type,
           },
           private: repo.private,
+          html_url: repo.html_url,
           description: repo.description,
-          url: repo.url,
-          htmlUrl: repo.html_url,
-          createdAt: repo.created_at,
-          updatedAt: repo.updated_at,
+          fork: repo.fork,
+          homepage: repo.homepage,
+          language: repo.language,
+
+          // Repository stats
+          forks_count: repo.forks_count,
+          stargazers_count: repo.stargazers_count,
+          watchers_count: repo.watchers_count,
+          open_issues_count: repo.open_issues_count,
+          size: repo.size,
+
+          // Repository features
+          has_issues: repo.has_issues,
+          has_projects: repo.has_projects,
+          has_wiki: repo.has_wiki,
+          has_pages: repo.has_pages,
+          has_downloads: repo.has_downloads,
+          has_discussions: repo.has_discussions,
+
+          // Repository status
+          archived: repo.archived,
+          disabled: repo.disabled,
+          visibility: repo.visibility,
+          default_branch: repo.default_branch,
+
+          // Topics/Tags
+          topics: repo.topics || [],
+
+          // Timestamps
+          created_at: repo.created_at,
+          updated_at: repo.updated_at,
+          pushed_at: repo.pushed_at,
+
+          // URLs
+          clone_url: repo.clone_url,
+          ssh_url: repo.ssh_url,
+          svn_url: repo.svn_url,
+
+          // Permissions
+          permissions: repo.permissions,
+
+          // Security features
+          security: {
+            advanced_security:
+              repo.security_and_analysis?.advanced_security?.status ||
+              "disabled",
+            secret_scanning:
+              repo.security_and_analysis?.secret_scanning?.status || "disabled",
+            secret_scanning_push_protection:
+              repo.security_and_analysis?.secret_scanning_push_protection
+                ?.status || "disabled",
+          },
+
+          // Additional metadata
+          orgId: organization.orgId,
           githubIntegrationId: integration._id,
         };
         return await GithubRepository.findOneAndUpdate(
-          { repoId: repoData.repoId },
+          { repoId: repoData.id },
           repoData,
           { upsert: true, new: true }
         );
