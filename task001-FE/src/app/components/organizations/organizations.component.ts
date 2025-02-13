@@ -536,68 +536,303 @@ export class OrganizationsComponent implements OnInit {
       cellStyle: { 'white-space': 'normal' },
     };
 
-    // Special column configurations for commits
-    const commitColumns: { [key: string]: ColDef } = {
-      sha: {
+    // GitHub-specific column configurations
+    const githubColumns: { [key: string]: ColDef } = {
+      name: {
         ...baseConfig,
-        width: 100,
+        headerName: 'Repository',
+        minWidth: 250,
         cellRenderer: (params: any) => {
-          return `<a href="${
-            params.data.html_url
-          }" target="_blank">${params.value.substring(0, 7)}</a>`;
+          const repo = params.data;
+          const visibility =
+            repo.visibility || (repo.private ? 'private' : 'public');
+          const visibilityIcon = visibility === 'private' ? 'lock' : 'public';
+          const visibilityColor =
+            visibility === 'private' ? '#cb2431' : '#28a745';
+          const archived = repo.archived
+            ? '<span class="material-icons" style="font-size: 14px; color: #666;" title="Archived">archive</span>'
+            : '';
+          const fork = repo.fork
+            ? '<span class="material-icons" style="font-size: 14px; color: #666;" title="Fork">fork_right</span>'
+            : '';
+
+          return `
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span class="material-icons" style="font-size: 16px; color: #57606a;">code</span>
+                  <a href="${
+                    repo.html_url
+                  }" target="_blank" style="font-weight: 500; color: #0969da;">
+                    ${params.value}
+                  </a>
+                  <span class="material-icons" style="font-size: 14px; color: ${visibilityColor};" title="${visibility}">
+                    ${visibilityIcon}
+                  </span>
+                  ${archived}
+                  ${fork}
+                </div>
+                ${
+                  repo.description
+                    ? `<div style="color: #57606a; font-size: 12px; margin-left: 24px;">
+                    ${repo.description}
+                  </div>`
+                    : ''
+                }
+              </div>
+            </div>
+          `;
         },
       },
-      'commit.message': {
+      'owner.login': {
         ...baseConfig,
-        headerName: 'Message',
-        minWidth: 300,
+        headerName: 'Owner',
+        width: 200,
+        cellRenderer: (params: any) => {
+          const owner = params.data.owner;
+          if (!owner) return '';
+
+          return `
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div style="
+                width: 24px; 
+                height: 24px; 
+                border-radius: 50%;
+                overflow: hidden;
+                flex-shrink: 0;
+              ">
+                <img 
+                  src="${owner.avatar_url}" 
+                  style="width: 100%; height: 100%; object-fit: cover;"
+                  alt="${owner.login}"
+                  onerror="this.src='assets/default-avatar.png';"
+                >
+              </div>
+              <div style="
+                display: flex;
+                flex-direction: column;
+                min-width: 0;
+              ">
+                <a 
+                  href="${owner.html_url}" 
+                  target="_blank" 
+                  style="
+                    color: #0969da;
+                    text-decoration: none;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                  "
+                  title="${owner.login}"
+                >
+                  ${owner.login}
+                </a>
+                <span style="
+                  color: #57606a;
+                  font-size: 12px;
+                  overflow: hidden;
+                  text-overflow: ellipsis;
+                  white-space: nowrap;
+                ">
+                  ${owner.type}
+                </span>
+              </div>
+            </div>
+          `;
+        },
+        autoHeight: true,
+        cellStyle: {
+          display: 'flex',
+          alignItems: 'center',
+          padding: '8px 15px',
+        },
       },
-      'commit.author.name': {
+      language: {
         ...baseConfig,
-        headerName: 'Author',
+        width: 130,
+        cellRenderer: (params: any) => {
+          if (!params.value) return '<span style="color: #666;">-</span>';
+
+          // Language colors (you can add more)
+          const colors: { [key: string]: string } = {
+            JavaScript: '#f1e05a',
+            TypeScript: '#3178c6',
+            Python: '#3572A5',
+            Java: '#b07219',
+            'C#': '#178600',
+            PHP: '#4F5D95',
+            Ruby: '#701516',
+            Go: '#00ADD8',
+            Rust: '#dea584',
+            HTML: '#e34c26',
+            CSS: '#563d7c',
+          };
+
+          const color = colors[params.value] || '#666';
+
+          return `
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span style="
+                width: 12px;
+                height: 12px;
+                border-radius: 50%;
+                background-color: ${color};
+              "></span>
+              ${params.value}
+            </div>
+          `;
+        },
+      },
+      topics: {
+        ...baseConfig,
+        headerName: 'Topics',
+        minWidth: 200,
+        cellRenderer: (params: any) => {
+          return (
+            params.value
+              ?.map(
+                (topic: string) => `
+                <span style="
+                  background-color: #ddf4ff;
+                  color: #0969da;
+                  padding: 2px 8px;
+                  border-radius: 12px;
+                  font-size: 12px;
+                  margin: 2px 4px 2px 0;
+                  display: inline-block;
+                ">${topic}</span>
+              `
+              )
+              .join('') || ''
+          );
+        },
+      },
+      stargazers_count: {
+        ...baseConfig,
+        headerName: 'Stars',
+        width: 100,
+        cellRenderer: (params: any) => {
+          return `
+            <div style="display: flex; align-items: center; gap: 4px;" title="Stars">
+              <span class="material-icons" style="font-size: 14px; color: #666;">star</span>
+              ${params.value.toLocaleString()}
+            </div>
+          `;
+        },
+      },
+      forks_count: {
+        ...baseConfig,
+        headerName: 'Forks',
+        width: 100,
+        cellRenderer: (params: any) => {
+          return `
+            <div style="display: flex; align-items: center; gap: 4px;" title="Forks">
+              <span class="material-icons" style="font-size: 14px; color: #666;">fork_right</span>
+              ${params.value.toLocaleString()}
+            </div>
+          `;
+        },
+      },
+      updated_at: {
+        ...baseConfig,
+        headerName: 'Last Updated',
         width: 150,
+        valueFormatter: (params: any) => {
+          if (!params.value) return '';
+          const date = new Date(params.value);
+          const now = new Date();
+          const diff = now.getTime() - date.getTime();
+          const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+          if (days === 0) return 'today';
+          if (days === 1) return 'yesterday';
+          if (days < 30) return `${days} days ago`;
+          if (days < 365) return `${Math.floor(days / 30)} months ago`;
+          return `${Math.floor(days / 365)} years ago`;
+        },
       },
-      'commit.author.date': {
+      visibility: {
         ...baseConfig,
-        headerName: 'Date',
+        width: 120,
+        cellRenderer: (params: any) => {
+          const colors = {
+            public: '#28a745',
+            private: '#cb2431',
+          };
+          const color = colors[params.value as keyof typeof colors] || '#666';
+          return `
+            <span style="
+              color: ${color};
+              display: flex;
+              align-items: center;
+              gap: 4px;
+            ">
+              <span class="material-icons" style="font-size: 14px;">
+                ${params.value === 'private' ? 'lock' : 'public'}
+              </span>
+              ${params.value}
+            </span>
+          `;
+        },
+      },
+      description: {
+        ...baseConfig,
+        minWidth: 300,
+        flex: 1,
+        cellRenderer: (params: any) => {
+          return (
+            params.value || '<span style="color: #666;">No description</span>'
+          );
+        },
+      },
+      size: {
+        ...baseConfig,
+        headerName: 'Size',
+        width: 120,
+        valueFormatter: (params: any) => {
+          return this.formatFileSize(params.value);
+        },
+      },
+      open_issues_count: {
+        ...baseConfig,
+        headerName: 'Open Issues',
+        width: 120,
+        cellRenderer: (params: any) => {
+          return `
+            <div style="display: flex; align-items: center; gap: 4px;">
+              <span class="material-icons" style="font-size: 14px; color: #666;">error_outline</span>
+              ${params.value.toLocaleString()}
+            </div>
+          `;
+        },
+      },
+      'security.advanced_security': {
+        ...baseConfig,
+        headerName: 'Security',
+        width: 120,
+        cellRenderer: (params: any) => {
+          const status = params.value === 'enabled';
+          return `
+            <div style="display: flex; align-items: center; gap: 4px;">
+              <span class="material-icons" style="font-size: 14px; color: ${
+                status ? '#28a745' : '#cb2431'
+              }">
+                ${status ? 'security' : 'security_off'}
+              </span>
+              ${status ? 'Enabled' : 'Disabled'}
+            </div>
+          `;
+        },
+      },
+      created_at: {
+        ...baseConfig,
+        headerName: 'Created',
         width: 160,
         valueFormatter: (params: any) => {
           return params.value ? new Date(params.value).toLocaleString() : '';
         },
       },
-      'author.login': {
-        ...baseConfig,
-        headerName: 'GitHub User',
-        width: 150,
-        cellRenderer: (params: any) => {
-          const author = params.data.author;
-          return author
-            ? `
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <img src="${author.avatar_url}" style="width: 20px; height: 20px; border-radius: 50%;">
-              <a href="${author.html_url}" target="_blank">${author.login}</a>
-            </div>
-          `
-            : '';
-        },
-      },
-      'commit.verification.verified': {
-        ...baseConfig,
-        headerName: 'Verified',
-        width: 100,
-        cellRenderer: (params: any) => {
-          const verified = params.value;
-          return verified
-            ? '<span style="color: #28a745;">✓ Verified</span>'
-            : '<span style="color: #cb2431;">✗ Unverified</span>';
-        },
-      },
     };
-
-    // Return commit-specific column config if exists
-    if (commitColumns[key]) {
-      return commitColumns[key];
-    }
 
     // Special column configurations
     const specialColumns: { [key: string]: ColDef } = {
@@ -709,6 +944,11 @@ export class OrganizationsComponent implements OnInit {
       };
     }
 
+    // Return GitHub-specific column config if exists
+    if (githubColumns[key]) {
+      return githubColumns[key];
+    }
+
     // Default column config based on value type
     return this.getDefaultColumnConfig(baseConfig, value);
   }
@@ -795,5 +1035,13 @@ export class OrganizationsComponent implements OnInit {
       this.dataTypeOptions.find((opt) => opt.value === 'repo-data')?.subTypes ||
       []
     );
+  }
+
+  private formatFileSize(bytes: number): string {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   }
 }

@@ -277,16 +277,20 @@ export class RepositoryRelationshipsComponent implements OnInit {
     {
       headerName: 'Author',
       field: 'author',
-      width: 150,
+      width: 180,
       cellRenderer: (params: any) => {
         const data = params.data;
         const avatarUrl = data.authorAvatar;
-        return avatarUrl
-          ? `<div class="author-cell">
-            <img src="${avatarUrl}" alt="${params.value}" class="avatar"/>
-            <span>${params.value}</span>
-          </div>`
-          : params.value;
+        const authorName = params.value;
+
+        return `
+          <div class="author-cell">
+            ${
+              avatarUrl ? `<img src="${avatarUrl}" alt="" class="avatar"/>` : ''
+            }
+            <span class="author-name">${authorName || ''}</span>
+          </div>
+        `;
       },
     },
     {
