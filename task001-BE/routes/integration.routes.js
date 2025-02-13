@@ -22,5 +22,17 @@ router.get(
   relationshipsController.getRepositoryRelationships
 );
 router.get("/github/repos", integrationController.getStoredRepos);
+router.get(
+  "/github/repos/:owner/:repo/issues/:issueNumber/details",
+  integrationController.getIssueDetails
+);
+router.get(
+  "/github/repos/:owner/:repo/pulls/:prNumber/details",
+  integrationController.getPRDetails
+);
+router.get(
+  "/github/repos/:owner/:repo/commits/:sha/details",
+  integrationController.getCommitDetails
+);
 
 module.exports = router;

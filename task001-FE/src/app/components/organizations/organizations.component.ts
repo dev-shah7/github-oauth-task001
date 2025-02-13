@@ -186,6 +186,26 @@ export class OrganizationsComponent implements OnInit {
     cacheBlockSize: this.paginationPageSize,
     domLayout: 'autoHeight',
     suppressPaginationPanel: true,
+    groupDefaultExpanded: -1,
+    animateRows: true,
+    enableRangeSelection: true,
+    suppressAggFuncInHeader: true,
+    groupDisplayType: 'groupRows',
+    showOpenedGroup: true,
+    autoGroupColumnDef: {
+      headerName: 'Group',
+      minWidth: 250,
+      flex: 1,
+      cellRendererParams: {
+        suppressCount: false,
+        checkbox: true,
+        innerRenderer: (params: any) => {
+          const value = params.value || '';
+          const count = params.node.allChildrenCount;
+          return `${value} (${count})`;
+        },
+      },
+    },
     onGridReady: (params) => {
       this.gridApi = params.api;
     },
@@ -490,7 +510,6 @@ export class OrganizationsComponent implements OnInit {
       .subscribe({
         next: (response) => {
           try {
-            // Transform the data based on the selected subtype
             const transformedData = response.data.map((item) => {
               return this.flattenObject(item);
             });
@@ -502,6 +521,16 @@ export class OrganizationsComponent implements OnInit {
               this.columnDefs = Object.keys(transformedData[0]).map((key) =>
                 this.getColumnDef(key, transformedData[0][key])
               );
+
+              // Set default grouped columns based on data type
+              if (
+                this.selectedSubType === 'issues' ||
+                this.selectedSubType === 'pulls'
+              ) {
+                this.setDefaultGroupingForIssues();
+              } else if (this.selectedSubType === 'commits') {
+                this.setDefaultGroupingForCommits();
+              }
 
               // Update grid
               if (this.gridApi) {
@@ -572,6 +601,9 @@ export class OrganizationsComponent implements OnInit {
       resizable: true,
       flex: 1,
       minWidth: 120,
+      enableRowGroup: true,
+      enableValue: true,
+      aggFunc: 'count',
     };
 
     // Special column configurations
@@ -580,6 +612,7 @@ export class OrganizationsComponent implements OnInit {
         ...baseConfig,
         width: 100,
         flex: 0,
+        enableRowGroup: false,
         cellRenderer: (params: any) => {
           return params.value
             ? `<a href="${params.data.html_url}" target="_blank">#${params.value}</a>`
@@ -589,6 +622,8 @@ export class OrganizationsComponent implements OnInit {
       title: {
         ...baseConfig,
         flex: 2,
+        enableRowGroup: true,
+        rowGroup: true,
         cellRenderer: (params: any) => {
           const labels = params.data.labels || [];
           const labelHtml = labels
@@ -603,7 +638,13 @@ export class OrganizationsComponent implements OnInit {
       state: {
         ...baseConfig,
         width: 120,
+        enableRowGroup: true,
+        rowGroup: false,
+        aggFunc: 'count',
         cellRenderer: (params: any) => {
+          if (params.node.group) {
+            return `${params.value} (${params.node.allChildrenCount})`;
+          }
           return `<span class="badge badge-${params.value?.toLowerCase()}">${
             params.value
           }</span>`;
@@ -612,22 +653,60 @@ export class OrganizationsComponent implements OnInit {
       user_login: {
         ...baseConfig,
         headerName: 'Author',
+        enableRowGroup: true,
+        rowGroup: false,
+        aggFunc: 'count',
         cellRenderer: (params: any) => {
-          const avatarUrl = params.data.user_avatar;
+          if (!params.data || params.node.group) {
+            return params.value || '';
+          }
+
+          // Extract avatar URL from the flattened data structure
+          const avatarUrl =
+            params.data.user_avatar_url ||
+            params.data.user_avatarUrl ||
+            params.data.avatar_url;
+
+          const userUrl = params.data.user_html_url || params.data.html_url;
+          const userName = params.value;
+
           return `
-            <div style="display: flex; align-items: center; gap: 8px;">
+            <div class="author-cell">
               ${
                 avatarUrl
-                  ? `<img src="${avatarUrl}" style="width: 24px; height: 24px; border-radius: 50%;">`
+                  ? `<div class="avatar-container">
+                       <img 
+                         src="${avatarUrl}" 
+                         class="user-avatar" 
+                         alt="${userName}"
+                         style="width: 30px; height: 30px; border-radius: 50%; object-fit: cover;"
+                       />
+                     </div>`
                   : ''
               }
-              <span>${params.value || ''}</span>
+              ${
+                userUrl
+                  ? `<a href="${userUrl}" target="_blank" class="author-name">${
+                      userName || ''
+                    }</a>`
+                  : `<span class="author-name">${userName || ''}</span>`
+              }
             </div>
           `;
         },
+        cellClass: 'author-cell-wrapper',
+        autoHeight: true,
+        width: 200,
+        minWidth: 180,
       },
       created_at: {
         ...baseConfig,
+        enableRowGroup: true,
+        valueGetter: (params: any) => {
+          if (!params.data?.created_at) return null;
+          const date = new Date(params.data.created_at);
+          return date.toISOString().split('T')[0];
+        },
         valueFormatter: (params) => {
           return params.value ? new Date(params.value).toLocaleString() : '';
         },
@@ -646,11 +725,7 @@ export class OrganizationsComponent implements OnInit {
       },
     };
 
-    if (specialColumns[key]) {
-      return specialColumns[key];
-    }
-
-    return baseConfig;
+    return specialColumns[key] || baseConfig;
   }
 
   private flattenObject(obj: any, prefix = ''): { [key: string]: any } {
@@ -660,7 +735,17 @@ export class OrganizationsComponent implements OnInit {
       const value = obj[key];
       const newKey = prefix ? `${prefix}_${key}` : key;
 
-      if (
+      if (key === 'user' && typeof value === 'object') {
+        // Handle user object specially
+        flattened['user_login'] = value.login;
+        flattened['user_avatar_url'] = value.avatar_url || value.avatarUrl;
+        flattened['user_html_url'] = value.html_url;
+      } else if (key === 'author' && typeof value === 'object') {
+        // Handle author object specially
+        flattened['user_login'] = value.login || value.name;
+        flattened['user_avatar_url'] = value.avatar_url || value.avatarUrl;
+        flattened['user_html_url'] = value.html_url;
+      } else if (
         value &&
         typeof value === 'object' &&
         !Array.isArray(value) &&
@@ -785,6 +870,40 @@ export class OrganizationsComponent implements OnInit {
   public onGridSizeChanged(params: any): void {
     if (this.gridApi) {
       this.gridApi.sizeColumnsToFit();
+    }
+  }
+
+  // Add method to handle group changes
+  onGroupingChanged(event: any) {
+    if (this.gridApi) {
+      this.gridApi.refreshCells();
+    }
+  }
+
+  // Add helper methods for default grouping
+  private setDefaultGroupingForIssues() {
+    const rowGroupCols = ['state', 'user_login'];
+    this.columnDefs = this.columnDefs.map((col) => ({
+      ...col,
+      rowGroup: rowGroupCols.includes(col.field || ''),
+      hide: rowGroupCols.includes(col.field || ''),
+    }));
+
+    if (this.gridApi) {
+      this.gridApi.setGridOption('columnDefs', this.columnDefs);
+    }
+  }
+
+  private setDefaultGroupingForCommits() {
+    const rowGroupCols = ['author_login', 'created_at'];
+    this.columnDefs = this.columnDefs.map((col) => ({
+      ...col,
+      rowGroup: rowGroupCols.includes(col.field || ''),
+      hide: rowGroupCols.includes(col.field || ''),
+    }));
+
+    if (this.gridApi) {
+      this.gridApi.setGridOption('columnDefs', this.columnDefs);
     }
   }
 }

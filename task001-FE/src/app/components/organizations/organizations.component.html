@@ -129,7 +129,10 @@
           [suppressHorizontalScroll]="false"
           [suppressMovableColumns]="false"
           [suppressColumnVirtualisation]="true"
+          [groupDisplayType]="'groupRows'"
+          [rowGroupPanelShow]="'always'"
           (gridSizeChanged)="onGridSizeChanged($event)"
+          (columnRowGroupChanged)="onGroupingChanged($event)"
         >
         </ag-grid-angular>
       </div>
