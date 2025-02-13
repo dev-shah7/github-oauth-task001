@@ -1,30 +1,4 @@
 <div class="tickets-container">
-  <div class="search-controls">
-    <mat-form-field appearance="outline">
-      <mat-label>Search</mat-label>
-      <input
-        matInput
-        [(ngModel)]="searchText"
-        (ngModelChange)="onSearchChange($event)"
-        placeholder="Search tickets..."
-      />
-      <button
-        *ngIf="searchText"
-        matSuffix
-        mat-icon-button
-        aria-label="Clear"
-        (click)="clearSearch()"
-      >
-        <mat-icon>close</mat-icon>
-      </button>
-    </mat-form-field>
-  </div>
-
-  <div class="search-results" *ngIf="!error && rowData.length">
-    <a href="javascript:void(0)" (click)="openFindUserGrid()" class="find-user-link">Find User</a>
-    <span class="search-text">{{ searchText }}</span>
-  </div>
-
   <div *ngIf="loading" class="loading">Loading...</div>
   <div *ngIf="error" class="error">{{ error }}</div>
 
@@ -35,44 +9,9 @@
       [columnDefs]="columnDefs"
       [defaultColDef]="defaultColDef"
       [gridOptions]="gridOptions"
-      [quickFilterText]="searchText"
       style="width: 100%;"
+      (gridReady)="onGridReady($event)"
     >
     </ag-grid-angular>
-
-    <div class="pagination-controls">
-      <div class="page-size">
-        <mat-form-field>
-          <mat-label>Items per page</mat-label>
-          <mat-select
-            [value]="pageSize"
-            (selectionChange)="onPageSizeChange($event.value)"
-          >
-            <mat-option [value]="10">10</mat-option>
-            <mat-option [value]="20">20</mat-option>
-          </mat-select>
-        </mat-form-field>
-      </div>
-
-      <div class="navigation-buttons">
-        <button
-          mat-icon-button
-          [disabled]="!canGoPrevious || isLoading"
-          (click)="goToPreviousPage()"
-          aria-label="Previous page"
-        >
-          <mat-icon>chevron_left</mat-icon>
-        </button>
-        <span class="current-page">Page {{ currentPage }}</span>
-        <button
-          mat-icon-button
-          [disabled]="!canGoNext || isLoading"
-          (click)="goToNextPage()"
-          aria-label="Next page"
-        >
-          <mat-icon>chevron_right</mat-icon>
-        </button>
-      </div>
-    </div>
   </div>
 </div>
