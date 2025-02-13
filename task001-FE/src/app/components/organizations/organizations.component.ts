@@ -392,7 +392,7 @@ export class OrganizationsComponent implements OnInit {
 
       // Apply quick filter if there's search text
       if (this.searchText) {
-        this.gridApi.setQuickFilter(this.searchText);
+        this.gridApi.setQuickFilterText(this.searchText);
       }
     } catch (error) {
       console.error('Error updating grid:', error);
@@ -420,7 +420,6 @@ export class OrganizationsComponent implements OnInit {
       pageSize: this.pageSize,
     };
 
-    // Show loading overlay if grid is ready
     if (this.gridApi) {
       this.gridApi.showLoadingOverlay();
     }
@@ -432,54 +431,58 @@ export class OrganizationsComponent implements OnInit {
       .subscribe({
         next: (response) => {
           try {
-            // Store the raw data
             this.rowData = response.data;
             this.totalRecords = response?.pagination?.totalRecords || 0;
 
-            // Update pagination state
             this.canGoPrevious = this.currentPage > 1;
             this.canGoNext = this.rowData.length === this.pageSize;
 
-            // Wait for grid API to be available
-            const updateGrid = () => {
-              if (this.gridApi) {
-                // Force regenerate column definitions
-                if (this.rowData.length > 0) {
-                  const flattenedFirstRow = this.flattenObject(this.rowData[0]);
-                  this.columnDefs = Object.entries(flattenedFirstRow).map(
-                    ([key, value]) => this.getColumnDef(key, value)
-                  );
-                  this.gridApi.setGridOption('columnDefs', this.columnDefs);
-                }
+            if (this.rowData.length > 0) {
+              const flattenedFirstRow = this.flattenObject(this.rowData[0]);
+              this.columnDefs = Object.entries(flattenedFirstRow).map(
+                ([key, value]) => this.getColumnDef(key, value)
+              );
 
-                // Update the grid with new data
+              if (this.selectedSubType === 'issues') {
+                this.columnDefs.unshift({
+                  headerName: 'Actions',
+                  field: 'actions',
+                  filter: false,
+                  sortable: false,
+                  width: 120,
+                  cellRenderer: (params: any) => {
+                    const owner = this.selectedRepo?.owner?.login || '';
+                    const repo = this.selectedRepo?.name || '';
+                    const baseUrl = window.location.origin;
+                    return `<a href="${baseUrl}/find-user?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}&issueNumber=${params.data.issueNumber}" 
+                              target="_blank" 
+                              style="color: #1976d2; text-decoration: underline;">
+                              Find User
+                           </a>`;
+                  }
+                });
+              }
+
+              if (this.gridApi) {
+                this.gridApi.setGridOption('columnDefs', this.columnDefs);
+                
                 const flattenedData = this.rowData.map((item) =>
                   this.flattenObject(item)
                 );
                 this.gridApi.setGridOption('rowData', flattenedData);
-
-                // Update pagination settings
                 this.gridApi.setGridOption(
                   'paginationPageSize',
                   Number(this.pageSize)
                 );
 
-                // Apply quick filter if there's search text
                 if (this.searchText) {
                   this.gridApi.setQuickFilter(this.searchText);
                 }
 
-                // Hide loading overlay
                 this.gridApi.hideOverlay();
-              } else {
-                // Retry after a short delay if grid API is not ready
-                setTimeout(updateGrid, 100);
               }
-            };
+            }
 
-            updateGrid();
-
-            // Clear loading state
             this.isLoading = false;
           } catch (error) {
             console.error('Error processing response:', error);
