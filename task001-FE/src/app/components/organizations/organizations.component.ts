@@ -522,6 +522,31 @@ export class OrganizationsComponent implements OnInit {
                 this.getColumnDef(key, transformedData[0][key])
               );
 
+              // Add Find User link for issues
+              if (this.selectedSubType === 'issues') {
+                this.columnDefs.unshift({
+                  headerName: 'Actions',
+                  field: 'actions',
+                  filter: false,
+                  sortable: false,
+                  width: 120,
+                  cellRenderer: (params: any) => {
+                    const owner = this.selectedRepo?.owner?.login || '';
+                    const repo = this.selectedRepo?.name || '';
+                    const baseUrl = window.location.origin;
+                    return `<a href="${baseUrl}/find-user?owner=${encodeURIComponent(
+                      owner
+                    )}&repo=${encodeURIComponent(repo)}&issueNumber=${
+                      params.data.issueNumber
+                    }" 
+                              target="_blank" 
+                              style="color: #1976d2; text-decoration: underline;">
+                              Find User
+                           </a>`;
+                  },
+                });
+              }
+
               // Set default grouped columns based on data type
               if (
                 this.selectedSubType === 'issues' ||
